@@ -27,9 +27,8 @@ These decisions should not be changed incidentally. Record a proposal under
    internal sequence identity and may be many-to-many at the input boundary.
 4. **Release pairs are generic.** Core code uses `old` and `new`; it contains no
    CAFA4/CAFA5-specific branches.
-5. **Both ontologies are retained.** New annotations are interpreted with the
-   new ontology and projected into the old vocabulary for leakage-aware
-   comparison.
+5. **One ontology is pinned.** Both annotation releases are interpreted through
+   the same immutable GO snapshot. Its date is an independent benchmark input.
 6. **Evidence is a policy.** Evidence types form named categories and explicit
    accepted transitions, not a universal confidence score.
 7. **Parsing preserves information.** Qualifiers, negation, references,
@@ -51,7 +50,8 @@ These decisions should not be changed incidentally. Record a proposal under
 - GO OWL loading for terms, `is_a`, `part_of`, alternate IDs, and obsolescence.
 - Exact sequence indexing and CAFA/UniProt alias matching.
 - Release-bound annotation snapshots and cross-file validation.
-- Projection of new GO terms into the old ontology vocabulary.
+- Symmetric normalization of both GOA releases through one ontology vocabulary.
+- Auditable exclusion of unknown, obsolete, deprecated, and NOT-constrained terms.
 - Detection of acquired terms, changed evidence, upgrades, and removals.
 - Unit tests and small synthetic end-to-end fixtures.
 
@@ -93,8 +93,8 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 | M1 | Source handling and structured validation | complete | initial scaffold | Plain paths, gzip, checksums, structured issues |
 | M2 | Streaming FASTA and GAF readers | complete | initial scaffold | Synthetic coverage complete; historical fixtures belong to M6 |
 | M3 | Exact sequence index and alias matching | complete | initial scaffold | In-memory exact path complete; full-release profiling belongs to M7 |
-| M4 | GO OWL loader and ontology projection | complete | initial scaffold | Initial `is_a`/`part_of`, alternate-ID, projection, and cycle semantics |
-| M5 | Snapshot validation and comparison events | complete | initial scaffold | Positive assertions complete; negation remains an explicit open decision |
+| M4 | GO OWL loader and ontology semantics | active | current branch | One-snapshot normalization, relation-aware navigation, IC and SimGIC under test |
+| M5 | Snapshot validation and comparison events | active | current branch | Shared ontology and downward NOT constraints implemented with auditable exclusions |
 | M6 | End-to-end historical CAFA/GOA fixture | planned | unassigned | Pin small redistributable fixture and checksums |
 | M7 | Full-release profiling and storage decision | planned | unassigned | Choose backend only from measured constraints |
 | M8 | Ground-truth export schema | planned | unassigned | Must preserve direct versus propagated terms |
@@ -102,24 +102,13 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 
 ## Open decisions
 
-### Negated annotations
-
-The parser retains `NOT` annotations, but the first comparison implementation
-does not treat a new negated assertion as a simple deletion. We need documented
-semantics for interactions between positive and negated assertions before such
-events select or exclude proteins.
-
 ### Relations included in propagation
 
-The first implementation recognizes `is_a` and `part_of`. Before producing a
-published benchmark, confirm the exact relation set against the intended CAFA
-evaluation protocol and pin it in the run metadata.
-
-### Ontology projection of new terms
-
-The current policy should project a term absent from the old ontology to the
-nearest old ancestor or ancestors. We need to decide whether multiple nearest
-ancestors are all admissible and how this should be reported in ground truth.
+Ontology navigation retains `is_a`, `part_of`, `regulates`,
+`positively_regulates`, and `negatively_regulates`. Annotation inheritance and
+NOT constraints conservatively use only `is_a` and `part_of`, because traversing
+causal relations changes the gene-product-to-term relation. Confirm the scoring
+closure against the intended evaluation protocol before publishing a benchmark.
 
 ### Evidence policy presets
 
@@ -135,10 +124,11 @@ rejected case.
 - FASTA: normalization, uncommon residues, malformed records, duplicate IDs.
 - GAF: version headers, all 17 fields, negation, malformed rows, compression.
 - Identity: duplicate sequences, multiple accessions, unmatched targets.
-- Ontology: alternate IDs, obsolete terms, `is_a`, `part_of`, cycles, projection.
+- Ontology: alternate IDs, replacement and exclusion of obsolete terms, relation
+  policies, cycles, information content, and SimGIC.
 - Snapshot: unknown terms and aspect/namespace disagreement.
-- Comparison: acquisition, evidence upgrade, evidence-only change, removal, and
-  projection.
+- Comparison: acquisition, evidence upgrade, evidence-only change, removal,
+  shared-ontology enforcement, and NOT constraints.
 - Integration: a tiny two-release dataset with a hand-computed expected result.
 
 Tests must not depend on network access or mutable external releases.
@@ -165,5 +155,5 @@ Add modules because of a demonstrated need:
 - Add `similarity.py` when approximate rather than exact matching is specified.
 - Add `predictions.py` and `metrics.py` only after ground-truth events are stable.
 - Add `cli.py` only after at least one complete notebook workflow is validated.
-- Split `ontology.py` only when a second ontology or a substantially more complex
-  release-mapping strategy requires it.
+- Split `ontology.py` only when graph size or substantially more complex ontology
+  semantics requires it.

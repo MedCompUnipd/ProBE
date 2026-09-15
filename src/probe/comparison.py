@@ -8,6 +8,7 @@ from enum import StrEnum
 
 from probe.evidence import EvidencePolicy
 from probe.identity import IdentityMap
+from probe.ontology import TermResolution, TermStatus
 from probe.records import AnnotationRecord
 from probe.snapshot import AnnotationSnapshot
 from probe.validation import ValidationReport
@@ -26,6 +27,22 @@ class ChangeKind(StrEnum):
     ANNOTATION_REMOVED = "annotation_removed"
 
 
+class ExclusionReason(StrEnum):
+    NOT_ASSERTION = "not_assertion"
+    TRUE_PATH_VIOLATION = "true_path_violation"
+    UNKNOWN_TERM = "unknown_term"
+    OBSOLETE_TERM = "obsolete_term"
+    DEPRECATED_TERM = "deprecated_term"
+
+
+@dataclass(frozen=True, slots=True)
+class AnnotationExclusion:
+    snapshot_release: str
+    annotation: AnnotationRecord
+    reason: ExclusionReason
+    normalized_term_id: str | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class AnnotationChange:
     sequence_id: str
@@ -36,13 +53,14 @@ class AnnotationChange:
     kind: ChangeKind
     old_evidence: frozenset[str]
     new_evidence: frozenset[str]
-    projected_from: frozenset[str]
+    normalized_from: frozenset[str]
     qualifies: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ComparisonResult:
     changes: tuple[AnnotationChange, ...]
+    exclusions: tuple[AnnotationExclusion, ...]
     validation: ValidationReport
     evidence_policy: EvidencePolicy
 
@@ -68,7 +86,7 @@ class ComparisonResult:
 @dataclass(slots=True)
 class _AssertionState:
     evidence: set[str]
-    projected_from: set[str]
+    normalized_from: set[str]
 
 
 AssertionKey = tuple[str, str, str, str]
@@ -100,67 +118,89 @@ def _relation(annotation: AnnotationRecord) -> str:
     return annotation.relation or DEFAULT_RELATIONS[annotation.aspect]
 
 
-def _old_assertions(
+def _invalid_reason(resolution: TermResolution) -> ExclusionReason:
+    if resolution.status is TermStatus.OBSOLETE:
+        return ExclusionReason.OBSOLETE_TERM
+    if resolution.status is TermStatus.DEPRECATED:
+        return ExclusionReason.DEPRECATED_TERM
+    return ExclusionReason.UNKNOWN_TERM
+
+
+def _assertions(
     snapshot: AnnotationSnapshot,
     subject_to_sequence: dict[str, str],
+    exclusions: list[AnnotationExclusion],
     report: ValidationReport,
 ) -> dict[AssertionKey, _AssertionState]:
-    assertions: dict[AssertionKey, _AssertionState] = {}
+    usable: list[tuple[AnnotationRecord, str, TermResolution]] = []
+    negated_by_subject: dict[tuple[str, str], set[str]] = defaultdict(set)
+
     for annotation in snapshot.annotations:
         sequence_id = subject_to_sequence.get(annotation.subject_id)
         if sequence_id is None:
             continue
-        if annotation.negated:
+        resolution = snapshot.ontology.resolve(annotation.term_id)
+        if not resolution.is_usable:
+            reason = _invalid_reason(resolution)
+            exclusions.append(
+                AnnotationExclusion(snapshot.release, annotation, reason)
+            )
             report.warning(
-                "NEGATED_ANNOTATION_IGNORED",
-                "negated annotations are retained but not compared yet",
+                reason.value.upper(),
+                f"excluded {annotation.term_id} from {snapshot.release}",
                 source=annotation.source,
                 line=annotation.line,
             )
             continue
-        term_id = snapshot.ontology.resolve_id(annotation.term_id)
+
+        usable.append((annotation, sequence_id, resolution))
+        if annotation.negated and resolution.canonical_id is not None:
+            negated_by_subject[(sequence_id, annotation.aspect)].add(
+                resolution.canonical_id
+            )
+
+    forbidden: dict[tuple[str, str], frozenset[str]] = {
+        key: snapshot.ontology.excluded_by_not(term_ids)
+        for key, term_ids in negated_by_subject.items()
+    }
+
+    assertions: dict[AssertionKey, _AssertionState] = {}
+    for annotation, sequence_id, resolution in usable:
+        term_id = resolution.canonical_id
         if term_id is None:
             continue
+        if annotation.negated:
+            exclusions.append(
+                AnnotationExclusion(
+                    snapshot.release,
+                    annotation,
+                    ExclusionReason.NOT_ASSERTION,
+                    term_id,
+                )
+            )
+            continue
+        if term_id in forbidden.get((sequence_id, annotation.aspect), ()):
+            exclusions.append(
+                AnnotationExclusion(
+                    snapshot.release,
+                    annotation,
+                    ExclusionReason.TRUE_PATH_VIOLATION,
+                    term_id,
+                )
+            )
+            report.warning(
+                "TRUE_PATH_VIOLATION",
+                f"excluded positive {term_id} because of a NOT ancestor",
+                source=annotation.source,
+                line=annotation.line,
+            )
+            continue
+
         key = (sequence_id, term_id, _relation(annotation), annotation.aspect)
         state = assertions.setdefault(key, _AssertionState(set(), set()))
         state.evidence.add(annotation.evidence)
-    return assertions
-
-
-def _new_assertions(
-    old: AnnotationSnapshot,
-    new: AnnotationSnapshot,
-    subject_to_sequence: dict[str, str],
-    report: ValidationReport,
-) -> dict[AssertionKey, _AssertionState]:
-    assertions: dict[AssertionKey, _AssertionState] = {}
-    for annotation in new.annotations:
-        sequence_id = subject_to_sequence.get(annotation.subject_id)
-        if sequence_id is None:
-            continue
-        if annotation.negated:
-            report.warning(
-                "NEGATED_ANNOTATION_IGNORED",
-                "negated annotations are retained but not compared yet",
-                source=annotation.source,
-                line=annotation.line,
-            )
-            continue
-        projection = old.ontology.project_from(new.ontology, annotation.term_id)
-        if not projection.is_mappable:
-            report.warning(
-                "UNMAPPABLE_NEW_TERM",
-                f"{annotation.term_id} cannot be projected into ontology {old.release}",
-                source=annotation.source,
-                line=annotation.line,
-            )
-            continue
-        for term_id in projection.target_terms:
-            key = (sequence_id, term_id, _relation(annotation), annotation.aspect)
-            state = assertions.setdefault(key, _AssertionState(set(), set()))
-            state.evidence.add(annotation.evidence)
-            if term_id != projection.source_term:
-                state.projected_from.add(projection.source_term)
+        if annotation.term_id != term_id:
+            state.normalized_from.add(annotation.term_id)
     return assertions
 
 
@@ -172,15 +212,26 @@ def compare_annotations(
     evidence_policy: EvidencePolicy | None = None,
     strict: bool = True,
 ) -> ComparisonResult:
-    """Return direct annotation changes expressed in the old GO vocabulary."""
+    """Compare direct assertions interpreted through one pinned GO snapshot."""
 
     policy = evidence_policy or EvidencePolicy.experimental()
     report = ValidationReport()
     report.extend(old.validation)
     report.extend(new.validation)
+    exclusions: list[AnnotationExclusion] = []
+
+    if old.ontology is not new.ontology:
+        report.error(
+            "ONTOLOGY_SNAPSHOT_MISMATCH",
+            "old and new annotations must share the same GeneOntology object",
+        )
+        if strict:
+            report.raise_for_errors()
+        return ComparisonResult((), (), report, policy)
+
     subject_to_sequence, targets_by_sequence = _identity_lookup(identities, report)
-    before = _old_assertions(old, subject_to_sequence, report)
-    after = _new_assertions(old, new, subject_to_sequence, report)
+    before = _assertions(old, subject_to_sequence, exclusions, report)
+    after = _assertions(new, subject_to_sequence, exclusions, report)
 
     changes: list[AnnotationChange] = []
     for key in sorted(before.keys() | after.keys()):
@@ -189,8 +240,9 @@ def compare_annotations(
         new_state = after.get(key)
         old_evidence = frozenset(old_state.evidence) if old_state else frozenset()
         new_evidence = frozenset(new_state.evidence) if new_state else frozenset()
-        projected_from = (
-            frozenset(new_state.projected_from) if new_state else frozenset()
+        normalized_from = frozenset(
+            (old_state.normalized_from if old_state else set())
+            | (new_state.normalized_from if new_state else set())
         )
 
         if old_state is None:
@@ -218,11 +270,11 @@ def compare_annotations(
                 kind=kind,
                 old_evidence=old_evidence,
                 new_evidence=new_evidence,
-                projected_from=projected_from,
+                normalized_from=normalized_from,
                 qualifies=qualifies,
             )
         )
 
     if strict:
         report.raise_for_errors()
-    return ComparisonResult(tuple(changes), report, policy)
+    return ComparisonResult(tuple(changes), tuple(exclusions), report, policy)

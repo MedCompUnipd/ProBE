@@ -2,8 +2,10 @@
 
 from probe.comparison import (
     AnnotationChange,
+    AnnotationExclusion,
     ChangeKind,
     ComparisonResult,
+    ExclusionReason,
     compare_annotations,
 )
 from probe.evidence import EvidenceCategory, EvidencePolicy
@@ -16,7 +18,14 @@ from probe.identity import (
     normalize_sequence,
     sequence_digest,
 )
-from probe.ontology import GeneOntology, OntologyTerm, TermProjection
+from probe.ontology import (
+    ANNOTATION_PROPAGATION_RELATIONS,
+    NAVIGABLE_RELATIONS,
+    GeneOntology,
+    OntologyTerm,
+    TermResolution,
+    TermStatus,
+)
 from probe.snapshot import AnnotationSnapshot
 from probe.validation import (
     Severity,
@@ -27,20 +36,25 @@ from probe.validation import (
 
 __all__ = [
     "AnnotationChange",
+    "AnnotationExclusion",
     "AnnotationSnapshot",
+    "ANNOTATION_PROPAGATION_RELATIONS",
     "ChangeKind",
     "ComparisonResult",
     "EvidenceCategory",
     "EvidencePolicy",
+    "ExclusionReason",
     "GeneOntology",
     "IdentityMap",
+    "NAVIGABLE_RELATIONS",
     "OntologyTerm",
     "SequenceAlias",
     "SequenceDataset",
     "SequenceIndex",
     "SequenceMatch",
     "Severity",
-    "TermProjection",
+    "TermResolution",
+    "TermStatus",
     "ValidationError",
     "ValidationIssue",
     "ValidationReport",

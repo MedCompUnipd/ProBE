@@ -6,7 +6,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
-from probe.ontology import GeneOntology
+from probe.ontology import GeneOntology, TermStatus
 from probe.parsing.gaf import GafParser
 from probe.records import AnnotationRecord
 from probe.source import Source
@@ -33,13 +33,17 @@ class AnnotationSnapshot:
         *,
         release: str,
         annotations: Source | str | Path,
-        ontology: Source | str | Path,
+        ontology: GeneOntology | Source | str | Path,
         subjects: Collection[str] | None = None,
         strict: bool = True,
     ) -> AnnotationSnapshot:
         report = ValidationReport()
         annotation_source = Source.from_value(annotations)
-        go = GeneOntology.from_owl(ontology, strict=False, report=report)
+        go = (
+            ontology
+            if isinstance(ontology, GeneOntology)
+            else GeneOntology.from_owl(ontology, strict=False, report=report)
+        )
         wanted = frozenset(subjects) if subjects is not None else None
         parsed = tuple(
             annotation
@@ -58,14 +62,25 @@ class AnnotationSnapshot:
 
     def _validate_annotations(self) -> None:
         for annotation in self.annotations:
-            term = self.ontology.term(annotation.term_id)
-            if term is None:
-                self.validation.error(
-                    "UNKNOWN_ANNOTATION_TERM",
-                    f"{annotation.term_id} is absent from ontology {self.release}",
+            resolution = self.ontology.resolve(annotation.term_id)
+            if not resolution.is_usable:
+                self.validation.warning(
+                    "ANNOTATION_TERM_EXCLUDED",
+                    f"{annotation.term_id} is {resolution.status.value} "
+                    "in the pinned ontology",
                     source=annotation.source,
                     line=annotation.line,
                 )
+                continue
+            if resolution.status is TermStatus.REPLACED:
+                self.validation.warning(
+                    "ANNOTATION_TERM_REPLACED",
+                    f"{annotation.term_id} is replaced by {resolution.canonical_id}",
+                    source=annotation.source,
+                    line=annotation.line,
+                )
+            term = self.ontology.term(annotation.term_id)
+            if term is None:
                 continue
             expected = ASPECT_NAMESPACES.get(annotation.aspect)
             if term.namespace and expected and term.namespace != expected:

@@ -2,16 +2,50 @@
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 from probe.source import Source
 from probe.validation import ValidationReport
 
-DEFAULT_RELATIONS = frozenset({"is_a", "part_of"})
+IS_A = "is_a"
+PART_OF = "part_of"
+HAS_PART = "has_part"
+REGULATES = "regulates"
+POSITIVELY_REGULATES = "positively_regulates"
+NEGATIVELY_REGULATES = "negatively_regulates"
+
+# These edges can be followed from a more specific GO term towards a broader or
+# causally related term. This does not imply that an annotation can be inherited
+# unchanged over every edge.
+NAVIGABLE_RELATIONS = frozenset(
+    {IS_A, PART_OF, REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES}
+)
+
+# Positive annotations propagate upward, and NOT constraints propagate downward,
+# only over relations that preserve the gene-product-to-term meaning.
+ANNOTATION_PROPAGATION_RELATIONS = frozenset({IS_A, PART_OF})
+DEFAULT_RELATIONS = ANNOTATION_PROPAGATION_RELATIONS
+
 GO_ROOTS = frozenset({"GO:0003674", "GO:0008150", "GO:0005575"})
+GO_ROOT_BY_NAMESPACE = {
+    "molecular_function": "GO:0003674",
+    "biological_process": "GO:0008150",
+    "cellular_component": "GO:0005575",
+}
+
+
+class TermStatus(StrEnum):
+    ACTIVE = "active"
+    ALTERNATE_ID = "alternate_id"
+    REPLACED = "replaced"
+    OBSOLETE = "obsolete"
+    DEPRECATED = "deprecated"
+    UNKNOWN = "unknown"
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,25 +54,30 @@ class OntologyTerm:
     label: str = ""
     namespace: str = ""
     obsolete: bool = False
+    deprecated: bool = False
     alternate_ids: tuple[str, ...] = ()
     replaced_by: tuple[str, ...] = ()
     consider: tuple[str, ...] = ()
 
+    @property
+    def is_active(self) -> bool:
+        return not self.obsolete and not self.deprecated
+
 
 @dataclass(frozen=True, slots=True)
-class TermProjection:
-    source_term: str
-    target_terms: frozenset[str]
-    distance: int | None
-    kind: str
+class TermResolution:
+    requested_id: str
+    canonical_id: str | None
+    status: TermStatus
+    candidates: tuple[str, ...] = ()
 
     @property
-    def is_mappable(self) -> bool:
-        return bool(self.target_terms)
+    def is_usable(self) -> bool:
+        return self.canonical_id is not None
 
 
 class GeneOntology:
-    """A GO release with explicit, relation-aware graph operations."""
+    """A GO snapshot with explicit relation and annotation semantics."""
 
     def __init__(
         self,
@@ -55,10 +94,14 @@ class GeneOntology:
         for term in self.terms.values():
             for alternate_id in term.alternate_ids:
                 self._alternate_ids[alternate_id] = term.identifier
+
         parents: dict[str, dict[str, set[str]]] = {}
+        children: dict[str, dict[str, set[str]]] = {}
         for child, relation, parent in edges:
             parents.setdefault(child, {}).setdefault(relation, set()).add(parent)
+            children.setdefault(parent, {}).setdefault(relation, set()).add(child)
         self._parents = parents
+        self._children = children
 
     @classmethod
     def from_owl(
@@ -73,60 +116,165 @@ class GeneOntology:
         return OwlLoader().load(source, strict=strict, report=report)
 
     def __contains__(self, term_id: str) -> bool:
-        return self.resolve_id(term_id) is not None
+        return self.resolve(term_id).is_usable
 
     def __len__(self) -> int:
         return len(self.terms)
 
+    def raw_term(self, term_id: str) -> OntologyTerm | None:
+        canonical = (
+            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
+        )
+        return self.terms.get(canonical) if canonical else None
+
+    def resolve(self, term_id: str) -> TermResolution:
+        """Resolve an annotation ID without silently accepting invalid terms."""
+
+        canonical = (
+            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
+        )
+        if canonical is None:
+            return TermResolution(term_id, None, TermStatus.UNKNOWN)
+
+        term = self.terms[canonical]
+        if term.is_active:
+            status = (
+                TermStatus.ACTIVE
+                if canonical == term_id
+                else TermStatus.ALTERNATE_ID
+            )
+            return TermResolution(term_id, canonical, status)
+
+        replacements = tuple(
+            sorted(
+                {
+                    replacement
+                    for candidate in term.replaced_by
+                    if (replacement := self._resolve_active_id(candidate)) is not None
+                }
+            )
+        )
+        if len(replacements) == 1:
+            return TermResolution(
+                term_id,
+                replacements[0],
+                TermStatus.REPLACED,
+                replacements,
+            )
+
+        status = TermStatus.OBSOLETE if term.obsolete else TermStatus.DEPRECATED
+        candidates = replacements or tuple(sorted(term.consider))
+        return TermResolution(term_id, None, status, candidates)
+
+    def _resolve_active_id(self, term_id: str) -> str | None:
+        canonical = (
+            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
+        )
+        if canonical is None or not self.terms[canonical].is_active:
+            return None
+        return canonical
+
     def resolve_id(self, term_id: str) -> str | None:
-        if term_id in self.terms:
-            return term_id
-        return self._alternate_ids.get(term_id)
+        """Return an active canonical ID, including an unambiguous replacement."""
+
+        return self.resolve(term_id).canonical_id
 
     def term(self, term_id: str) -> OntologyTerm | None:
         resolved = self.resolve_id(term_id)
         return self.terms.get(resolved) if resolved else None
 
+    @staticmethod
+    def _related(
+        graph: Mapping[str, Mapping[str, set[str]]],
+        term_id: str,
+        relations: Iterable[str],
+    ) -> frozenset[str]:
+        by_relation = graph.get(term_id, {})
+        return frozenset(
+            related
+            for relation in relations
+            for related in by_relation.get(relation, ())
+        )
+
     def parents(
         self,
         term_id: str,
         *,
-        relations: Iterable[str] = DEFAULT_RELATIONS,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
     ) -> frozenset[str]:
         resolved = self.resolve_id(term_id)
         if resolved is None:
             return frozenset()
-        by_relation = self._parents.get(resolved, {})
-        return frozenset(
-            parent for relation in relations for parent in by_relation.get(relation, ())
-        )
+        return self._related(self._parents, resolved, relations)
+
+    def children(
+        self,
+        term_id: str,
+        *,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
+    ) -> frozenset[str]:
+        resolved = self.resolve_id(term_id)
+        if resolved is None:
+            return frozenset()
+        return self._related(self._children, resolved, relations)
 
     def ancestors(
         self,
         term_id: str,
         *,
-        relations: Iterable[str] = DEFAULT_RELATIONS,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
         include_self: bool = False,
+    ) -> frozenset[str]:
+        return self._closure(
+            term_id,
+            graph=self._parents,
+            relations=relations,
+            include_self=include_self,
+        )
+
+    def descendants(
+        self,
+        term_id: str,
+        *,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
+        include_self: bool = False,
+    ) -> frozenset[str]:
+        return self._closure(
+            term_id,
+            graph=self._children,
+            relations=relations,
+            include_self=include_self,
+        )
+
+    def _closure(
+        self,
+        term_id: str,
+        *,
+        graph: Mapping[str, Mapping[str, set[str]]],
+        relations: Iterable[str],
+        include_self: bool,
     ) -> frozenset[str]:
         resolved = self.resolve_id(term_id)
         if resolved is None:
             return frozenset()
         found = {resolved} if include_self else set()
-        queue = deque(self.parents(resolved, relations=relations))
+        queue = deque(self._related(graph, resolved, relations))
         while queue:
-            parent = queue.popleft()
-            if parent in found:
+            related = queue.popleft()
+            if related in found:
                 continue
-            found.add(parent)
-            queue.extend(self.parents(parent, relations=relations) - found)
+            found.add(related)
+            queue.extend(self._related(graph, related, relations) - found)
         return frozenset(found)
 
     def propagate(
         self,
         term_ids: Iterable[str],
         *,
-        relations: Iterable[str] = DEFAULT_RELATIONS,
+        relations: Iterable[str] = ANNOTATION_PROPAGATION_RELATIONS,
     ) -> frozenset[str]:
+        """Propagate positive annotations without changing their meaning."""
+
         propagated: set[str] = set()
         for term_id in term_ids:
             resolved = self.resolve_id(term_id)
@@ -135,43 +283,113 @@ class GeneOntology:
                 propagated.update(self.ancestors(resolved, relations=relations))
         return frozenset(propagated)
 
-    def project_from(
-        self,
-        source_ontology: GeneOntology,
-        term_id: str,
-        *,
-        relations: Iterable[str] = DEFAULT_RELATIONS,
-    ) -> TermProjection:
-        """Project a source release term to nearest terms in this release."""
+    def excluded_by_not(self, negated_term_ids: Iterable[str]) -> frozenset[str]:
+        """Return terms forbidden by NOT assertions under the true-path rule."""
 
-        source_id = source_ontology.resolve_id(term_id)
-        if source_id is None:
-            return TermProjection(term_id, frozenset(), None, "unknown_source_term")
-        if target_id := self.resolve_id(source_id):
-            kind = "same" if target_id == source_id else "alternate_id"
-            return TermProjection(source_id, frozenset({target_id}), 0, kind)
-
-        visited = {source_id}
-        frontier = {source_id}
-        distance = 0
-        while frontier:
-            distance += 1
-            next_frontier: set[str] = set()
-            targets: set[str] = set()
-            for current in frontier:
-                for parent in source_ontology.parents(current, relations=relations):
-                    if parent in visited:
-                        continue
-                    visited.add(parent)
-                    next_frontier.add(parent)
-                    if target := self.resolve_id(parent):
-                        targets.add(target)
-            if targets:
-                return TermProjection(
-                    source_id, frozenset(targets), distance, "nearest_ancestor"
+        excluded: set[str] = set()
+        for term_id in negated_term_ids:
+            resolved = self.resolve_id(term_id)
+            if resolved is not None:
+                excluded.add(resolved)
+                excluded.update(
+                    self.descendants(
+                        resolved,
+                        relations=ANNOTATION_PROPAGATION_RELATIONS,
+                    )
                 )
-            frontier = next_frontier
-        return TermProjection(source_id, frozenset(), None, "unmappable")
+        return frozenset(excluded)
+
+    def roots(
+        self,
+        *,
+        namespace: str | None = None,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
+    ) -> frozenset[str]:
+        return frozenset(
+            term.identifier
+            for term in self.terms.values()
+            if term.is_active
+            and (namespace is None or term.namespace == namespace)
+            and not self.parents(term.identifier, relations=relations)
+        )
+
+    def leaves(
+        self,
+        *,
+        namespace: str | None = None,
+        relations: Iterable[str] = NAVIGABLE_RELATIONS,
+    ) -> frozenset[str]:
+        return frozenset(
+            term.identifier
+            for term in self.terms.values()
+            if term.is_active
+            and (namespace is None or term.namespace == namespace)
+            and not self.children(term.identifier, relations=relations)
+        )
+
+    def cumulative_counts(
+        self,
+        direct_counts: Mapping[str, int | float],
+        *,
+        relations: Iterable[str] = ANNOTATION_PROPAGATION_RELATIONS,
+    ) -> dict[str, float]:
+        """Propagate direct annotation counts to every admissible ancestor."""
+
+        cumulative = {
+            term_id: 0.0 for term_id, term in self.terms.items() if term.is_active
+        }
+        for term_id, count in direct_counts.items():
+            if count < 0:
+                raise ValueError("annotation counts must be non-negative")
+            resolved = self.resolve_id(term_id)
+            if resolved is None:
+                continue
+            for propagated in self.propagate([resolved], relations=relations):
+                cumulative[propagated] = cumulative.get(propagated, 0.0) + float(count)
+        return cumulative
+
+    def information_content(
+        self,
+        direct_counts: Mapping[str, int | float],
+        *,
+        relations: Iterable[str] = ANNOTATION_PROPAGATION_RELATIONS,
+        smoothing: float = 1.0,
+    ) -> dict[str, float]:
+        """Compute namespace-relative information content from direct counts."""
+
+        if smoothing <= 0:
+            raise ValueError("smoothing must be greater than zero")
+        cumulative = self.cumulative_counts(direct_counts, relations=relations)
+        values: dict[str, float] = {}
+        for term_id, frequency in cumulative.items():
+            namespace = self.terms[term_id].namespace
+            root_id = GO_ROOT_BY_NAMESPACE.get(namespace)
+            if root_id is None or root_id not in cumulative:
+                continue
+            root_frequency = cumulative[root_id]
+            probability = (frequency + smoothing) / (root_frequency + smoothing)
+            values[term_id] = -math.log(min(probability, 1.0))
+        return values
+
+    def simgic(
+        self,
+        left: Iterable[str],
+        right: Iterable[str],
+        information_content: Mapping[str, float],
+        *,
+        relations: Iterable[str] = ANNOTATION_PROPAGATION_RELATIONS,
+    ) -> float:
+        """Return the IC-weighted Jaccard similarity of two GO term sets."""
+
+        left_closure = self.propagate(left, relations=relations)
+        right_closure = self.propagate(right, relations=relations)
+        union = left_closure | right_closure
+        denominator = sum(information_content.get(term, 0.0) for term in union)
+        if denominator == 0:
+            return 0.0
+        intersection = left_closure & right_closure
+        numerator = sum(information_content.get(term, 0.0) for term in intersection)
+        return numerator / denominator
 
     def validate(self) -> ValidationReport:
         report = ValidationReport()
@@ -213,8 +431,6 @@ class GeneOntology:
         return report
 
     def _has_propagation_cycle(self) -> bool:
-        """Detect a cycle without depending on a general graph library."""
-
         unvisited = set(self.terms)
         while unvisited:
             start = next(iter(unvisited))
@@ -234,7 +450,9 @@ class GeneOntology:
                     return True
                 active.add(node)
                 stack.append((node, True))
-                for parent in self.parents(node):
+                for parent in self.parents(
+                    node, relations=ANNOTATION_PROPAGATION_RELATIONS
+                ):
                     if parent in active:
                         return True
                     if parent not in complete:

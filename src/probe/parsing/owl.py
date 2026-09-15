@@ -7,15 +7,33 @@ from pathlib import Path
 from rdflib import BNode, Graph, Literal, Namespace, URIRef
 from rdflib.namespace import OWL, RDF, RDFS
 
-from probe.ontology import GeneOntology, OntologyTerm
+from probe.ontology import (
+    HAS_PART,
+    NEGATIVELY_REGULATES,
+    PART_OF,
+    POSITIVELY_REGULATES,
+    REGULATES,
+    GeneOntology,
+    OntologyTerm,
+)
 from probe.source import Source
 from probe.validation import ValidationReport
 
 OBO = Namespace("http://purl.obolibrary.org/obo/")
 OBO_IN_OWL = Namespace("http://www.geneontology.org/formats/oboInOwl#")
 IAO_REPLACED_BY = OBO["IAO_0100001"]
-RELATION_NAMES = {
-    "BFO:0000050": "part_of",
+RELATION_IRIS = {
+    str(OBO["BFO_0000050"]): PART_OF,
+    str(OBO["BFO_0000051"]): HAS_PART,
+    str(OBO["BFO_0000066"]): "occurs_in",
+    str(OBO["RO_0001025"]): "located_in",
+    str(OBO["RO_0002211"]): REGULATES,
+    str(OBO["RO_0002212"]): NEGATIVELY_REGULATES,
+    str(OBO["RO_0002213"]): POSITIVELY_REGULATES,
+    str(OBO["RO_0002215"]): "capable_of",
+    str(OBO["RO_0002216"]): "capable_of_part_of",
+    str(OBO["RO_0002327"]): "enables",
+    str(OBO["RO_0002331"]): "involved_in",
 }
 
 
@@ -33,10 +51,58 @@ def _obo_id(value: object) -> str | None:
 
 
 def _relation_name(value: object) -> str | None:
-    relation_id = _obo_id(value)
-    if relation_id is None:
+    if not isinstance(value, URIRef):
         return None
-    return RELATION_NAMES.get(relation_id, relation_id)
+    return RELATION_IRIS.get(str(value), _obo_id(value) or str(value))
+
+
+def _rdf_list(graph: Graph, head: object) -> tuple[object, ...]:
+    members: list[object] = []
+    visited: set[object] = set()
+    current = head
+    while current != RDF.nil and current not in visited:
+        visited.add(current)
+        member = graph.value(current, RDF.first)
+        if member is None:
+            break
+        members.append(member)
+        current = graph.value(current, RDF.rest)
+        if current is None:
+            break
+    return tuple(members)
+
+
+def _expression_edges(
+    graph: Graph,
+    expression: object,
+    *,
+    visited: set[object] | None = None,
+) -> tuple[tuple[str, str], ...]:
+    """Extract GO superclass and existential-restriction edges."""
+
+    if isinstance(expression, URIRef):
+        target = _obo_id(expression)
+        return (("is_a", target),) if target and target.startswith("GO:") else ()
+    if not isinstance(expression, BNode):
+        return ()
+
+    visited = visited if visited is not None else set()
+    if expression in visited:
+        return ()
+    visited.add(expression)
+
+    property_node = graph.value(expression, OWL.onProperty)
+    target_node = graph.value(expression, OWL.someValuesFrom)
+    relation = _relation_name(property_node)
+    target = _obo_id(target_node)
+    if relation and target and target.startswith("GO:"):
+        return ((relation, target),)
+
+    edges: list[tuple[str, str]] = []
+    for list_head in graph.objects(expression, OWL.intersectionOf):
+        for member in _rdf_list(graph, list_head):
+            edges.extend(_expression_edges(graph, member, visited=visited))
+    return tuple(edges)
 
 
 class OwlLoader:
@@ -79,8 +145,9 @@ class OwlLoader:
         for identifier, node in term_nodes.items():
             label = str(graph.value(node, RDFS.label) or "")
             namespace = str(graph.value(node, OBO_IN_OWL.hasOBONamespace) or "")
-            deprecated = graph.value(node, OWL.deprecated)
-            obsolete = str(deprecated).lower() == "true"
+            deprecated_value = graph.value(node, OWL.deprecated)
+            deprecated = str(deprecated_value).lower() == "true"
+            obsolete = label.casefold().startswith("obsolete ")
             alternate_ids = tuple(
                 str(value) for value in graph.objects(node, OBO_IN_OWL.hasAlternativeId)
             )
@@ -100,26 +167,20 @@ class OwlLoader:
                     label=label,
                     namespace=namespace,
                     obsolete=obsolete,
+                    deprecated=deprecated,
                     alternate_ids=alternate_ids,
                     replaced_by=replaced_by,
                     consider=consider,
                 )
             )
 
-            for parent_node in graph.objects(node, RDFS.subClassOf):
-                if (
-                    isinstance(parent_node, URIRef)
-                    and (parent_id := _obo_id(parent_node))
-                    and parent_id.startswith("GO:")
-                ):
-                    edges.append((identifier, "is_a", parent_id))
-                elif isinstance(parent_node, BNode):
-                    property_node = graph.value(parent_node, OWL.onProperty)
-                    target_node = graph.value(parent_node, OWL.someValuesFrom)
-                    relation = _relation_name(property_node)
-                    target = _obo_id(target_node)
-                    if relation and target and target.startswith("GO:"):
-                        edges.append((identifier, relation, target))
+            expressions = (
+                *graph.objects(node, RDFS.subClassOf),
+                *graph.objects(node, OWL.equivalentClass),
+            )
+            for expression in expressions:
+                for relation, target in _expression_edges(graph, expression):
+                    edges.append((identifier, relation, target))
 
         version_iri = next(graph.objects(None, OWL.versionIRI), None)
         ontology = GeneOntology(

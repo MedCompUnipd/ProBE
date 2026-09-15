@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+  xmlns:owl="http://www.w3.org/2002/07/owl#"
+  xmlns:obo="http://purl.obolibrary.org/obo/"
+  xmlns:oboInOwl="http://www.geneontology.org/formats/oboInOwl#">
+  <owl:Ontology rdf:about="http://purl.obolibrary.org/obo/go.owl">
+    <owl:versionIRI rdf:resource="http://purl.obolibrary.org/obo/go/releases/2023-01-01/go.owl"/>
+  </owl:Ontology>
+  <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0008150">
+    <rdfs:label>biological_process</rdfs:label>
+    <oboInOwl:hasOBONamespace>biological_process</oboInOwl:hasOBONamespace>
+  </owl:Class>
+  <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0000001">
+    <rdfs:label>example process</rdfs:label>
+    <oboInOwl:hasOBONamespace>biological_process</oboInOwl:hasOBONamespace>
+    <oboInOwl:hasAlternativeId>GO:9999999</oboInOwl:hasAlternativeId>
+    <rdfs:subClassOf rdf:resource="http://purl.obolibrary.org/obo/GO_0008150"/>
+  </owl:Class>
+  <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0000002">
+    <rdfs:label>regulatory process</rdfs:label>
+    <oboInOwl:hasOBONamespace>biological_process</oboInOwl:hasOBONamespace>
+    <rdfs:subClassOf>
+      <owl:Restriction>
+        <owl:onProperty rdf:resource="http://purl.obolibrary.org/obo/RO_0002211"/>
+        <owl:someValuesFrom rdf:resource="http://purl.obolibrary.org/obo/GO_0000001"/>
+      </owl:Restriction>
+    </rdfs:subClassOf>
+  </owl:Class>
+  <owl:Class rdf:about="http://purl.obolibrary.org/obo/GO_0000003">
+    <rdfs:label>obsolete old process</rdfs:label>
+    <oboInOwl:hasOBONamespace>biological_process</oboInOwl:hasOBONamespace>
+    <owl:deprecated>true</owl:deprecated>
+    <obo:IAO_0100001 rdf:resource="http://purl.obolibrary.org/obo/GO_0000001"/>
+  </owl:Class>
+</rdf:RDF>

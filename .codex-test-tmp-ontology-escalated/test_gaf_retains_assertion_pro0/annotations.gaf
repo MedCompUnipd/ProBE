@@ -1,0 +1,2 @@
+!gaf-version: 2.2
+UniProtKB	P12345	GENE	NOT|enables	GO:0000001	PMID:1	IDA	UniProtKB:P99999	F	protein name	ALIAS1|ALIAS2	protein	taxon:9606	20230101	UniProt	occurs_in(CL:1)	UniProtKB:P12345-2

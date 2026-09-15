@@ -17,14 +17,14 @@ ProBE keeps four inputs independent and versioned:
 2. One or more historical UniProt FASTA releases used to find accessions with
    exactly identical sequences.
 3. Two GO annotation snapshots, called `old` and `new`.
-4. The GO ontology release associated with each annotation snapshot.
+4. One pinned GO ontology snapshot used for both annotation releases.
 
 Exact sequences are assigned an internal SHA-256 identity. UniProt accessions
 and CAFA target identifiers are aliases of that identity; they are not treated
-as the identity itself. Annotations are compared only after terms from the new
-ontology have been projected into the old ontology's vocabulary. Evidence
-upgrades are decided by an explicit policy rather than an implicit numeric
-ranking.
+as the identity itself. Annotations are compared only after both releases have
+been normalized against the same ontology vocabulary. Unknown, obsolete, and
+ambiguous replacement terms are excluded with an auditable reason. Evidence
+upgrades are decided by an explicit policy rather than an implicit numeric ranking.
 
 ## Installation
 
@@ -51,6 +51,7 @@ The intended workflow is composed from ordinary Python objects:
 from probe import (
     AnnotationSnapshot,
     EvidencePolicy,
+    GeneOntology,
     SequenceDataset,
     SequenceIndex,
     compare_annotations,
@@ -67,16 +68,17 @@ uniprot = SequenceIndex.from_fastas(
 identities = uniprot.match(targets)
 
 subjects = identities.subject_ids
+ontology = GeneOntology.from_owl("data/pinned-go-plus.owl")
 old = AnnotationSnapshot.read(
     release="2023-01-01",
     annotations="data/goa_old.gaf.gz",
-    ontology="data/go_old.owl",
+    ontology=ontology,
     subjects=subjects,
 )
 new = AnnotationSnapshot.read(
     release="2025-01-01",
     annotations="data/goa_new.gaf.gz",
-    ontology="data/go_new.owl",
+    ontology=ontology,
     subjects=subjects,
 )
 
@@ -88,6 +90,7 @@ result = compare_annotations(
 )
 
 result.changes
+result.exclusions
 result.selected_targets
 result.validation
 ```
@@ -110,7 +113,7 @@ src/probe/
 │   ├── gaf.py           Streaming GAF 2.x parser
 │   └── owl.py           GO OWL/RDF loader
 ├── identity.py          Sequence normalization, hashing, and aliases
-├── ontology.py          GO graph semantics and release projection
+├── ontology.py          GO graph navigation, propagation, IC, and SimGIC
 ├── snapshot.py          Annotation/ontology release consistency
 ├── evidence.py          Explicit evidence categories and policies
 └── comparison.py        Annotation changes and protein selection
@@ -133,7 +136,7 @@ assumptions independently testable.
 - Preserve raw assertion provenance; filtering happens after parsing.
 - Keep direct annotations separate from ontology-propagated annotations.
 - Do not silently discard unknown, obsolete, negated, or unmappable terms.
-- Use release-matched ontology, annotation, and UniProt inputs.
+- Use the same pinned ontology object for both annotation releases.
 - Prefer immutable records and pure transformations.
 - Do not add a CLI code path separate from the Python API.
 - Avoid pandas as an internal data model. Notebook adapters may be added later.
