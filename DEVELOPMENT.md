@@ -94,7 +94,7 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 | M2 | Streaming FASTA and GAF readers | complete | initial scaffold | Synthetic coverage complete; historical fixtures belong to M6 |
 | M3 | Exact sequence index and alias matching | complete | initial scaffold | In-memory exact path complete; full-release profiling belongs to M7 |
 | M4 | GO OWL loader and ontology semantics | active | current branch | One-snapshot normalization, relation-aware navigation, IC and SimGIC under test |
-| M5 | Snapshot validation and comparison events | active | current branch | Shared ontology and downward NOT constraints implemented with auditable exclusions |
+| M5 | Snapshot validation and comparison events | active | current branch | Canonical direct assertions, cumulative evidence profiles, prior-knowledge states, and direct-event precedence implemented; benchmark masks remain deferred |
 | M6 | End-to-end historical CAFA/GOA fixture | planned | unassigned | Pin small redistributable fixture and checksums |
 | M7 | Full-release profiling and storage decision | planned | unassigned | Choose backend only from measured constraints |
 | M8 | Ground-truth export schema | planned | unassigned | Must preserve direct versus propagated terms |
@@ -112,9 +112,11 @@ closure against the intended evaluation protocol before publishing a benchmark.
 
 ### Evidence policy presets
 
-The experimental preset accepts GO experimental and high-throughput
-experimental codes. Additional presets need biological review before becoming
-part of the public API.
+The compatibility `experimental()` preset accepts traditional and
+high-throughput experimental codes. Explicit cumulative profiles now separate
+`experimental_strict`, `experimental_all`, phylogenetic, traceable, and broader
+non-electronic evidence. Milestone tests use `experimental_strict`; the profile
+used by the definitive benchmark still requires biological approval.
 
 ## Testing strategy
 
@@ -127,8 +129,10 @@ rejected case.
 - Ontology: alternate IDs, replacement and exclusion of obsolete terms, relation
   policies, cycles, information content, and SimGIC.
 - Snapshot: unknown terms and aspect/namespace disagreement.
-- Comparison: acquisition, evidence upgrade, evidence-only change, removal,
-  shared-ontology enforcement, and NOT constraints.
+- Comparison: canonical aggregation independent of assertion context, evidence
+  threshold upgrades, prior-knowledge states, redundant ancestors, specificity
+  refinements, branch acquisitions, shared-ontology enforcement, and NOT
+  constraints.
 - Integration: a tiny two-release dataset with a hand-computed expected result.
 
 Tests must not depend on network access or mutable external releases.

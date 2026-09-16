@@ -8,7 +8,7 @@ from probe.comparison import (
     ExclusionReason,
     compare_annotations,
 )
-from probe.evidence import EvidenceCategory, EvidencePolicy
+from probe.evidence import EvidenceCategory, EvidencePolicy, EvidenceTier
 from probe.identity import (
     IdentityMap,
     SequenceAlias,
@@ -17,6 +17,16 @@ from probe.identity import (
     SequenceMatch,
     normalize_sequence,
     sequence_digest,
+)
+from probe.knowledge import (
+    AssertionContext,
+    DirectAnnotationEvent,
+    DirectTermState,
+    EventSuperclass,
+    EventType,
+    PriorKnowledge,
+    PriorKnowledgeState,
+    determine_prior_knowledge,
 )
 from probe.ontology import (
     ANNOTATION_PROPAGATION_RELATIONS,
@@ -39,15 +49,23 @@ __all__ = [
     "AnnotationExclusion",
     "AnnotationSnapshot",
     "ANNOTATION_PROPAGATION_RELATIONS",
+    "AssertionContext",
     "ChangeKind",
     "ComparisonResult",
+    "DirectAnnotationEvent",
+    "DirectTermState",
     "EvidenceCategory",
     "EvidencePolicy",
+    "EvidenceTier",
+    "EventSuperclass",
+    "EventType",
     "ExclusionReason",
     "GeneOntology",
     "IdentityMap",
     "NAVIGABLE_RELATIONS",
     "OntologyTerm",
+    "PriorKnowledge",
+    "PriorKnowledgeState",
     "SequenceAlias",
     "SequenceDataset",
     "SequenceIndex",
@@ -59,6 +77,7 @@ __all__ = [
     "ValidationIssue",
     "ValidationReport",
     "compare_annotations",
+    "determine_prior_knowledge",
     "normalize_sequence",
     "sequence_digest",
 ]
