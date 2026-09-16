@@ -9,16 +9,18 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 [dependencies]
 python = ">=3.11,<3.14"
 rdflib = ">=7,<8"
+pytest = ">=8.4.2,<9"
 
 [pypi-dependencies]
 probe-benchmark = { path = ".", editable = true }
+pytest = "*"
 
 [feature.dev.dependencies]
 pytest = ">=8,<9"
 ruff = ">=0.11,<1"
 
 [environments]
-default = { features = ["dev"], solve-group = "default" }
+default = ["dev"]
 
 [tasks]
 test = "pytest"
