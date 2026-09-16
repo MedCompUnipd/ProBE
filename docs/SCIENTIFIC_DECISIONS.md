@@ -32,26 +32,20 @@ internal stop remains a significant validation event.
 ## Single ontology snapshot
 
 One pinned official `go-plus.owl` snapshot is used throughout the benchmark
-lifecycle. Its release date is an independent benchmark input and need not match
-either GOA release. Both GOA releases are interpreted using the same vocabulary;
-the same snapshot is used for construction and evaluation.
+lifecycle. Both GOA releases are interpreted using the same vocabulary chosen for
+that benchmark; the same snapshot is used for construction and evaluation.
 
 This supersedes the branch's earlier proposal to project between two ontology
-snapshots. A term absent from the pinned snapshot is excluded symmetrically from
-either GOA release. Active alternate IDs and one unambiguous `replaced_by` target
-are normalized to the active canonical ID. Obsolete or deprecated terms without
-one active replacement are excluded; `consider` suggestions are reported but are
-never selected automatically.
+snapshots. Consequences for obsolete, replacement, alternate, historical, and
+newly introduced terms must be explicitly tested and reported.
 
 Record the ontology URL, retrieval date, version IRI, SHA-256, parser version, and
 relation-policy version. Never silently replace a published benchmark's ontology.
 
 ## Relations and propagation
 
-Navigability is not annotation inheritance. The graph can be navigated upward
-through `is_a`, `part_of`, `regulates`, `positively_regulates`, and
-`negatively_regulates`. The conservative annotation propagation policy uses only
-`is_a` and `part_of`.
+Navigability is not annotation inheritance. The initial conservative propagation
+policy uses `is_a` and `part_of`.
 
 `regulates`, `positively_regulates`, and `negatively_regulates` are causal and may
 be navigable, but propagation through them changes the protein-to-term meaning.
@@ -60,10 +54,8 @@ be navigable, but propagation through them changes the protein-to-term meaning.
 `located_in`, and other relations by stable IRI, domain, range, and semantics before
 admitting them to closure.
 
-`has_part` is retained as graph information but is excluded from upward
-navigation and annotation closure. ProBE maintains both a conservative
-annotation-closure graph and a richer causal graph. The graph used for scoring
-must be pinned in run metadata.
+ProBE may maintain both a conservative annotation-closure graph and a richer causal
+or contextual graph. The graph used for scoring must be pinned in run metadata.
 
 ## Evidence codes
 
@@ -78,17 +70,7 @@ not be silently merged into strict experimental ground truth.
 
 Exclude by default from positive strict ground truth: `IEA` (automatic), `ND`
 (absence of biological data), `NAS` (non-traceable statement), and assertions with
-the `NOT` qualifier. A NOT assertion also excludes that node and all descendants
-reachable through `is_a` and `part_of`, for the same sequence identity and GO
-aspect. Preserve excluded records for auditing.
-
-## Information content and SimGIC
-
-Information content is computed independently within each GO namespace from
-direct annotation counts accumulated over the conservative annotation closure.
-SimGIC is the information-content-weighted Jaccard similarity of the two propagated
-term sets. The annotation corpus, smoothing value, ontology snapshot, and relation
-policy are part of the reproducibility metadata.
+the `NOT` qualifier. Preserve excluded records for auditing.
 
 ## Direct and propagated annotations
 
