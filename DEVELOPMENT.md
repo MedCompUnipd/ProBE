@@ -25,8 +25,9 @@ These decisions should not be changed incidentally. Record a proposal under
    and length. Similarity search is a separate future feature.
 3. **Identifiers are aliases.** CAFA and UniProt identifiers point to an
    internal sequence identity and may be many-to-many at the input boundary.
-4. **Release pairs are generic.** Core code uses `old` and `new`; it contains no
-   CAFA4/CAFA5-specific branches.
+4. **Release pairs are generic.** Acquisition uses the roles `start` and `end`;
+   release identifiers and dates remain explicit provenance rather than API
+   constants.
 5. **One ontology is pinned.** Both annotation releases are interpreted through
    the same immutable GO snapshot. Its date is an independent benchmark input.
 6. **Evidence is a policy.** Evidence types form named categories and explicit
@@ -57,8 +58,8 @@ These decisions should not be changed incidentally. Record a proposal under
 
 ### Explicitly deferred
 
-- CLI and configuration files.
-- Downloading or locating remote releases.
+- A general analysis CLI; the dedicated acquisition utility is intentionally
+  limited to freezing configured upstream inputs.
 - DIAMOND/MMseqs similarity matching.
 - GPAD/GPI and native ECO ingestion.
 - Prediction ingestion and CAFA metric calculation.
@@ -96,6 +97,7 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 | M4 | GO OWL loader and ontology semantics | active | current branch | `go.owl` is the master ontology; Milestone 2A context, exact-IRI edge policy, deterministic preflight, and synthetic tests are implemented; final report review remains required |
 | M4P | Release preprocessing and synchronization | complete | current branch | Flag-based CLI canonicalizes GO IDs, retains NOT provenance, removes every root row, restricts GOA to FASTA ACCIDs, writes an ACCID-only missing log, and filters FASTA to proteins with valid non-root annotations; a disposable SQLite index bounds memory for the documented 109 GB FASTA and 178 GB GOA inputs |
 | M4T | Target ID mapping and exact sequence matching | complete | current branch | Deterministic T+9 IDs, heterogeneous-header mapping, policy-versioned symmetric normalization, hash-indexed exact matching, and UniProt ACCID extraction implemented |
+| M4A | Reproducible upstream acquisition | complete | current branch | Explicit TOML-selected `start`/`end` UniProt, GOA, taxonomy, and optional ontology inputs; streaming atomic downloads, safe extraction, disk preflight, checksums, manifests, validation, and repair behavior implemented without biological parsing |
 | M5 | Snapshot validation and comparison events | complete | current branch | Canonical direct assertions, cumulative evidence profiles, prior-knowledge states, direct-event precedence, and exact t0/t1 release orchestration implemented |
 | M5T | Truth and evaluation masks | complete | current branch | Explicit-policy construction of aspect-specific Q, D_score, provenance-bearing G_candidate, all-usable K0, D_neutral1, X1, M, and final T; direct candidates remain intermediate only |
 | M6 | End-to-end historical CAFA/GOA fixture | planned | unassigned | Pin small redistributable fixture and checksums |
