@@ -2,9 +2,11 @@
 
 ## 1. Scope and authority
 
-This document designs the second implementation milestone,
+This document records the design and implementation contract for the second milestone,
 **ontology preflight, truth-set, and evaluation-mask construction**, for branch
-`codex/modifiche-main`. It does not implement the milestone.
+`codex/modifiche-main`. Milestones 2A and 2B are now implemented against
+synthetic fixtures; a definitive benchmark profile and real-release execution
+still require the approvals listed in section 18.
 
 The governing sources, in order, are:
 
@@ -37,7 +39,7 @@ Milestone 2A contains only:
 - cycle analysis on explicitly defined projections;
 - deterministic ontology preflight reporting;
 - synthetic loader, relation, and preflight tests;
-- execution against the real, locally pinned `go-plus.owl` release.
+- execution against the real, locally pinned `go.owl` release.
 
 Milestone 2A does not construct Q, closure truth, K0, D_score, D_neutral1, X1,
 M, or T. It may define stable handoff interfaces required by 2B. Completion of
@@ -75,7 +77,9 @@ The current implementation already provides:
 - inclusive propagation through `is_a` and `part_of`;
 - canonical BP, MF, and CC roots and ontology namespaces.
 
-The missing behavior is:
+The following list was the implementation gap at design time and is retained as
+historical rationale. The ontology/preflight and truth/mask items are now
+implemented; information, prediction, metrics, and export remain future work:
 
 - a lossless representation of the complete OWL graph beside the GO scoring
   projection;
@@ -110,22 +114,23 @@ needed by later layers rather than require the same in-memory object.
 The required provenance source is:
 
 ```text
-https://purl.obolibrary.org/obo/go/extensions/go-plus.owl
+http://purl.obolibrary.org/obo/go.owl
 ```
 
 This PURL is mobile and is not itself a reproducible pin. Milestone 2A must
 receive a local file plus `expected_sha256`, verify the checksum before parsing,
 and leave the file unchanged for the entire run. The implementation must not
-silently substitute `go-basic.owl`, `go.owl`, a
-different date, or a separately downloaded import. Multiple projections of one
+silently substitute `go-basic.owl`, `go-plus.owl`, a different date, or a
+separately downloaded import. Multiple projections of one
 loaded graph remain projections of the same ontology; they are not independent
 ontologies and must carry the same ontology identity.
 
-No `.owl` or `.obo` file is currently present in the repository outside the
-excluded historical reference area. Therefore this plan reports no real class,
-edge, relation, import, or reachability counts for `go-plus.owl`. Synthetic tests
-can establish semantics, but acceptance against the official artifact requires
-the pinned file to be supplied locally.
+As of 2026-09-19, an ignored local `data/go.owl` artifact is available for
+engineering tests and ontology preflight. It is the selected master ontology;
+`go-plus.owl` is explicitly outside the navigation and scoring workflow. Its
+deterministic report is recorded in `docs/ONTOLOGY_PREFLIGHT_PROVISIONAL.md`.
+Acceptance requires pinning the exact `go.owl` bytes and human review of its
+report.
 
 When the file is supplied, the preflight must perform these checks without
 network access:
@@ -181,7 +186,7 @@ approved until this preflight has run on the real pinned file.
 ### 4.1 Complete ontology graph
 
 The complete graph is the lossless RDF/OWL representation of the supplied
-`go-plus.owl` bytes. It retains:
+`go.owl` bytes. It retains:
 
 - every class, including external imported classes;
 - every object property and its IRI;
@@ -468,7 +473,7 @@ preflight before approval.
 
 ### 7.4 Deterministic preflight algorithm
 
-Given one locally pinned `go-plus.owl`:
+Given one locally pinned `go.owl`:
 
 1. construct and validate `OntologyFingerprint` from bytes, ontology metadata,
    axiom mode, import policy, relation-policy fingerprint, and loader-
@@ -841,7 +846,7 @@ code as an empty truth case. Its audit record must distinguish at least:
 The following decisions are already consistent across the user proposal,
 project instructions, and benchmark specification:
 
-1. `O` is one explicitly supplied, pinned release of official `go-plus.owl`; it
+1. `O` is one explicitly supplied, pinned release of official `go.owl`; it
    is not inferred from either annotation date and is never silently replaced by
    `go-basic.owl` or another ontology.
 2. The complete graph and every projection derive from an ontology context with
@@ -1358,7 +1363,7 @@ requirement.
    edges. Quarantine `NO_IS_A_ROOT_PATH_BUT_SAFE_PART_OF_PATH`; do not construct
    Q yet.
 9. Emit a deterministic report with counts and examples. Stop for human review
-   of the real pinned `go-plus.owl` report.
+   of the real pinned `go.owl` report.
 
 ### 13.2 Milestone 2B algorithm
 
@@ -1514,7 +1519,7 @@ milestone.
 
 Milestone 2A does not create `truth.py`, `masking.py`, Q, K0, X1, M, or target
 records. Its final deliverable is the deterministic preflight report produced
-from the supplied local `go-plus.owl`, followed by human approval or revision.
+from the supplied local `go.owl`, followed by human approval or revision.
 
 ### 16.2 Milestone 2B files
 
@@ -1548,7 +1553,7 @@ performs closure and set construction. None becomes a monolithic pipeline.
 
 Milestone 2A is acceptable when:
 
-1. a local `go-plus.owl` and expected SHA-256 are required; mismatch fails
+1. a local `go.owl` and expected SHA-256 are required; mismatch fails
    before parsing, and no network retrieval or silent replacement occurs;
 2. ontology/version IRIs, PURL provenance, imports, external classes,
    properties, unknown relations, unsupported expressions, and exact supported
@@ -1606,9 +1611,9 @@ Milestone 2B is acceptable when:
 The following choices must be approved before or during implementation. They
 must not be selected from predictor performance.
 
-1. **Official release:** choose and pin the exact `go-plus.owl` release. Its date
+1. **Official release:** choose and pin the exact `go.owl` release. Its date
    remains independent of GOA0 and GOA1.
-2. **Import policy:** decide whether the supplied `go-plus.owl` must be a fully
+2. **Import policy:** decide whether the supplied `go.owl` must be a fully
    materialized distribution, whether pinned local imports are mandatory, or
    whether declaration-only audit is acceptable. No implicit network retrieval
    is permitted.

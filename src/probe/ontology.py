@@ -90,10 +90,14 @@ class GeneOntology:
         self.terms = {term.identifier: term for term in terms}
         self.release = release
         self.source = source
-        self._alternate_ids: dict[str, str] = {}
+        alternate_ids: dict[str, set[str]] = {}
         for term in self.terms.values():
             for alternate_id in term.alternate_ids:
-                self._alternate_ids[alternate_id] = term.identifier
+                alternate_ids.setdefault(alternate_id, set()).add(term.identifier)
+        self._alternate_ids = {
+            alternate_id: tuple(sorted(canonical_ids))
+            for alternate_id, canonical_ids in alternate_ids.items()
+        }
 
         parents: dict[str, dict[str, set[str]]] = {}
         children: dict[str, dict[str, set[str]]] = {}
@@ -122,57 +126,78 @@ class GeneOntology:
         return len(self.terms)
 
     def raw_term(self, term_id: str) -> OntologyTerm | None:
-        canonical = (
-            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
-        )
-        return self.terms.get(canonical) if canonical else None
+        if term_id in self.terms:
+            return self.terms[term_id]
+        alternatives = self._alternate_ids.get(term_id, ())
+        return self.terms.get(alternatives[0]) if len(alternatives) == 1 else None
 
     def resolve(self, term_id: str) -> TermResolution:
         """Resolve an annotation ID without silently accepting invalid terms."""
 
-        canonical = (
-            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
-        )
-        if canonical is None:
+        primary = self.terms.get(term_id)
+        alternate_holders = self._alternate_ids.get(term_id, ())
+        if primary is None and not alternate_holders:
             return TermResolution(term_id, None, TermStatus.UNKNOWN)
 
-        term = self.terms[canonical]
-        if term.is_active:
-            status = (
-                TermStatus.ACTIVE
-                if canonical == term_id
-                else TermStatus.ALTERNATE_ID
-            )
-            return TermResolution(term_id, canonical, status)
-
-        replacements = tuple(
+        seeds = set(alternate_holders)
+        if primary is not None:
+            seeds.add(term_id)
+        active_targets = tuple(
             sorted(
                 {
-                    replacement
-                    for candidate in term.replaced_by
-                    if (replacement := self._resolve_active_id(candidate)) is not None
+                    target
+                    for seed in seeds
+                    for target in self._active_targets(seed, frozenset())
                 }
             )
         )
-        if len(replacements) == 1:
+        if primary is not None and primary.is_active:
+            if not alternate_holders or set(alternate_holders) == {term_id}:
+                return TermResolution(term_id, term_id, TermStatus.ACTIVE)
+            return TermResolution(term_id, None, TermStatus.UNKNOWN, active_targets)
+        if len(active_targets) == 1:
+            status = TermStatus.ALTERNATE_ID if primary is None else TermStatus.REPLACED
             return TermResolution(
                 term_id,
-                replacements[0],
-                TermStatus.REPLACED,
-                replacements,
+                active_targets[0],
+                status,
+                active_targets,
             )
 
-        status = TermStatus.OBSOLETE if term.obsolete else TermStatus.DEPRECATED
-        candidates = replacements or tuple(sorted(term.consider))
+        if primary is None:
+            return TermResolution(
+                term_id,
+                None,
+                TermStatus.UNKNOWN,
+                active_targets,
+            )
+        status = TermStatus.OBSOLETE if primary.obsolete else TermStatus.DEPRECATED
+        candidates = active_targets or tuple(sorted(primary.consider))
         return TermResolution(term_id, None, status, candidates)
 
-    def _resolve_active_id(self, term_id: str) -> str | None:
-        canonical = (
-            term_id if term_id in self.terms else self._alternate_ids.get(term_id)
-        )
-        if canonical is None or not self.terms[canonical].is_active:
-            return None
-        return canonical
+    def _active_targets(
+        self,
+        term_id: str,
+        visited: frozenset[str],
+    ) -> frozenset[str]:
+        """Follow only unambiguous graph data towards active identifiers."""
+
+        if term_id in visited:
+            return frozenset()
+        next_visited = visited | {term_id}
+        seeds = {term_id} if term_id in self.terms else set()
+        seeds.update(self._alternate_ids.get(term_id, ()))
+        active: set[str] = set()
+        for seed in seeds:
+            term = self.terms.get(seed)
+            if term is None:
+                continue
+            if term.is_active:
+                active.add(seed)
+                continue
+            for replacement in term.replaced_by:
+                active.update(self._active_targets(replacement, next_visited))
+        return frozenset(active)
 
     def resolve_id(self, term_id: str) -> str | None:
         """Return an active canonical ID, including an unambiguous replacement."""
@@ -394,11 +419,27 @@ class GeneOntology:
     def validate(self) -> ValidationReport:
         report = ValidationReport()
         source = self.source.name if self.source else None
-        for alternate_id, canonical_id in self._alternate_ids.items():
-            if alternate_id in self.terms and alternate_id != canonical_id:
+        for alternate_id, holders in self._alternate_ids.items():
+            seeds = set(holders)
+            if alternate_id in self.terms:
+                seeds.add(alternate_id)
+            active_targets = {
+                target
+                for seed in seeds
+                for target in self._active_targets(seed, frozenset())
+            }
+            active_primary = self.terms.get(alternate_id)
+            conflicts_with_primary = bool(
+                active_primary
+                and active_primary.is_active
+                and any(holder != alternate_id for holder in holders)
+            )
+            divergent_holders = len(holders) > 1 and len(active_targets) != 1
+            if len(active_targets) > 1 or conflicts_with_primary or divergent_holders:
                 report.error(
                     "AMBIGUOUS_ALTERNATE_ID",
-                    f"{alternate_id} is both a canonical and alternate identifier",
+                    f"{alternate_id} resolves to multiple active identifiers: "
+                    f"{', '.join(sorted(active_targets))}",
                     source=source,
                 )
         for child, by_relation in self._parents.items():

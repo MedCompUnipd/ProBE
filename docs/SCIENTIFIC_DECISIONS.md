@@ -31,9 +31,14 @@ internal stop remains a significant validation event.
 
 ## Single ontology snapshot
 
-One pinned official `go-plus.owl` snapshot is used throughout the benchmark
+One pinned official `go.owl` snapshot is used throughout the benchmark
 lifecycle. Both GOA releases are interpreted using the same vocabulary chosen for
 that benchmark; the same snapshot is used for construction and evaluation.
+
+`go-plus.owl` is not used for node navigation or the scoring hierarchy. The
+master `go.owl` artifact contains the GO graph required by ProBE without the
+additional cross-ontology structure that makes `go-plus.owl` unsuitable for
+this workflow.
 
 This supersedes the branch's earlier proposal to project between two ontology
 snapshots. Consequences for obsolete, replacement, alternate, historical, and

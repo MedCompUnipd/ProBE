@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Esclude tutti i dati pesanti di test
+data/
+TESTING/

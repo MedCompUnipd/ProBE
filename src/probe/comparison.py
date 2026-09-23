@@ -78,6 +78,7 @@ class ComparisonResult:
     old_assertions: tuple[DirectTermState, ...] = ()
     new_assertions: tuple[DirectTermState, ...] = ()
     prior_knowledge: tuple[PriorKnowledge, ...] = ()
+    ontology_fingerprint: str | None = None
 
     @property
     def selected_sequence_ids(self) -> frozenset[str]:
@@ -287,6 +288,7 @@ def compare_annotations(
     *,
     identities: IdentityMap,
     evidence_policy: EvidencePolicy | None = None,
+    ontology_fingerprint: str | None = None,
     strict: bool = True,
 ) -> ComparisonResult:
     """Compare direct assertions interpreted through one pinned GO snapshot."""
@@ -379,4 +381,5 @@ def compare_annotations(
         old_assertions=tuple(before[key] for key in sorted(before)),
         new_assertions=tuple(after[key] for key in sorted(after)),
         prior_knowledge=prior_knowledge,
+        ontology_fingerprint=ontology_fingerprint,
     )

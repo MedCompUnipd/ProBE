@@ -77,7 +77,7 @@ biological ambiguity.
 ## Ontology policy
 
 Use one official immutable snapshot of
-`https://purl.obolibrary.org/obo/go/extensions/go-plus.owl`.
+`http://purl.obolibrary.org/obo/go.owl`.
 
 The same snapshot must be used for interpreting both GOA releases, benchmark
 construction, ground-truth propagation, prediction evaluation, and metrics.
@@ -116,7 +116,7 @@ authoritative implementation.
 Evaluate its OWL parsing, recognized and valid edges, use of labels versus IRIs,
 namespace handling, alternate and obsolete IDs, cycles, ancestor and descendant
 traversal, closure, information content, SimGIC behavior, compatibility with
-`go-plus.owl`, and resource usage.
+`go.owl`, and resource usage.
 
 For every reusable behavior, create a focused test before adapting it. Do not port
 unrelated legacy functions. Prefer extending the existing `src/probe/parsing/owl.py`

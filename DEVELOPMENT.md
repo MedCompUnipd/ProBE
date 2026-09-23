@@ -93,8 +93,11 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 | M1 | Source handling and structured validation | complete | initial scaffold | Plain paths, gzip, checksums, structured issues |
 | M2 | Streaming FASTA and GAF readers | complete | initial scaffold | Synthetic coverage complete; historical fixtures belong to M6 |
 | M3 | Exact sequence index and alias matching | complete | initial scaffold | In-memory exact path complete; full-release profiling belongs to M7 |
-| M4 | GO OWL loader and ontology semantics | active | current branch | One-snapshot normalization, relation-aware navigation, IC and SimGIC under test |
-| M5 | Snapshot validation and comparison events | active | current branch | Canonical direct assertions, cumulative evidence profiles, prior-knowledge states, and direct-event precedence implemented; benchmark masks remain deferred |
+| M4 | GO OWL loader and ontology semantics | active | current branch | `go.owl` is the master ontology; Milestone 2A context, exact-IRI edge policy, deterministic preflight, and synthetic tests are implemented; final report review remains required |
+| M4P | Release preprocessing and synchronization | complete | current branch | Flag-based CLI canonicalizes GO IDs, retains NOT provenance, removes every root row, restricts GOA to FASTA ACCIDs, writes an ACCID-only missing log, and filters FASTA to proteins with valid non-root annotations; a disposable SQLite index bounds memory for the documented 109 GB FASTA and 178 GB GOA inputs |
+| M4T | Target ID mapping and exact sequence matching | complete | current branch | Deterministic T+9 IDs, heterogeneous-header mapping, policy-versioned symmetric normalization, hash-indexed exact matching, and UniProt ACCID extraction implemented |
+| M5 | Snapshot validation and comparison events | complete | current branch | Canonical direct assertions, cumulative evidence profiles, prior-knowledge states, direct-event precedence, and exact t0/t1 release orchestration implemented |
+| M5T | Truth and evaluation masks | complete | current branch | Explicit-policy construction of aspect-specific Q, D_score, provenance-bearing G_candidate, all-usable K0, D_neutral1, X1, M, and final T; direct candidates remain intermediate only |
 | M6 | End-to-end historical CAFA/GOA fixture | planned | unassigned | Pin small redistributable fixture and checksums |
 | M7 | Full-release profiling and storage decision | planned | unassigned | Choose backend only from measured constraints |
 | M8 | Ground-truth export schema | planned | unassigned | Must preserve direct versus propagated terms |
@@ -110,6 +113,19 @@ NOT constraints conservatively use only `is_a` and `part_of`, because traversing
 causal relations changes the gene-product-to-term relation. Confirm the scoring
 closure against the intended evaluation protocol before publishing a benchmark.
 
+The Milestone 2A implementation now inventories every observed property and
+assigns a disposition per extracted edge. `is_a` and same-aspect `part_of` are
+the only propagating cases. Subproperties do not inherit propagation permission.
+The current `go.owl` report is recorded in
+`docs/ONTOLOGY_PREFLIGHT_PROVISIONAL.md`. `go-plus.owl` is not used for node
+navigation or scoring. Final acceptance still requires review of the pinned
+`go.owl` checksum and report.
+
+Truth/mask construction exposes two root-eligibility policies. The conservative
+`is_a_rooted` profile keeps part-of-only paths quarantined; `safe_root_paths`
+admits them only when selected explicitly. No headline default is inferred from
+predictor performance.
+
 ### Evidence policy presets
 
 The compatibility `experimental()` preset accepts traditional and
@@ -117,6 +133,13 @@ high-throughput experimental codes. Explicit cumulative profiles now separate
 `experimental_strict`, `experimental_all`, phylogenetic, traceable, and broader
 non-electronic evidence. Milestone tests use `experimental_strict`; the profile
 used by the definitive benchmark still requires biological approval.
+
+K0 has the separate named `all_usable_positive_t0` policy, including IEA and
+excluding NAS/ND/NOT-derived states. Neutral t1 truth retains distinct primary
+non-electronic and all-usable sensitivity profiles. Event selection likewise
+keeps new-knowledge, refinement, combined, and evidence-confirmation separate;
+the last can unmask only the upgraded direct term while leaving known ancestors
+masked.
 
 ## Testing strategy
 
@@ -126,8 +149,10 @@ rejected case.
 - FASTA: normalization, uncommon residues, malformed records, duplicate IDs.
 - GAF: version headers, all 17 fields, negation, malformed rows, compression.
 - Identity: duplicate sequences, multiple accessions, unmatched targets.
-- Ontology: alternate IDs, replacement and exclusion of obsolete terms, relation
-  policies, cycles, information content, and SimGIC.
+- Ontology: alternate IDs, transitive replacement of deprecated stubs, checksum
+  and fingerprint validation, complete-graph retention, exact-IRI edge
+  dispositions, root reachability, projection-specific cycles, information
+  content, and SimGIC.
 - Snapshot: unknown terms and aspect/namespace disagreement.
 - Comparison: canonical aggregation independent of assertion context, evidence
   threshold upgrades, prior-knowledge states, redundant ancestors, specificity

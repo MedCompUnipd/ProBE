@@ -113,7 +113,7 @@ Status meanings:
 | Exclude terms absent from the pinned ontology | Implemented | Unknown terms do not enter comparison and create auditable `UNKNOWN_TERM` exclusions. |
 | Canonical alternate IDs | Implemented | Alternate IDs resolve to the active primary ID before comparison, with `normalized_from` retained at change level. Raw per-assertion normalization provenance is not yet exported. |
 | Unambiguous replacement | Partial | Exactly one active `replaced_by` target is accepted. Multiple or unusable replacements are excluded. The policy currently always permits the unique replacement and cannot be configured. `consider` values are candidates only and are not mapped. |
-| Obsolete versus deprecated | Partial | Both states are represented and excluded when unresolved. OWL loading infers `obsolete` from a label beginning with `obsolete ` and `deprecated` from `owl:deprecated`; this needs real `go-plus.owl` fixtures and metadata tests. |
+| Obsolete versus deprecated | Partial | Both states are represented and excluded when unresolved. OWL loading infers `obsolete` from a label beginning with `obsolete ` and `deprecated` from `owl:deprecated`; this needs real `go.owl` fixtures and metadata tests. |
 | Stable relation identity | Implemented in parser | Known relations are mapped by IRI, including `part_of`, `has_part`, `occurs_in`, `located_in`, `regulates`, its positive/negative forms, `capable_of`, `capable_of_part_of`, `enables`, and `involved_in`. Unknown properties retain an IRI/OBO identifier. |
 | `is_a` and `part_of` annotation propagation | Implemented | `ANNOTATION_PROPAGATION_RELATIONS` contains only these relations; `propagate()` uses inclusive ancestor closure. |
 | Navigable but non-propagating relations | Partial | `regulates`, `positively_regulates`, and `negatively_regulates` are navigable but excluded from annotation propagation. Other parsed relations remain available in `edges` but are not admitted by the default navigation API. A richer graph policy object and relation metadata are missing. |
@@ -156,11 +156,11 @@ Status meanings:
 
 | Requirement | Status | Current behavior and gap |
 | --- | --- | --- |
-| `D_score` and scored direct truth | Missing | Qualifying changes are not converted into an aspect-specific direct scored set. |
-| Prior-known mask `K0` | Missing | There is no configurable prior-positive evidence policy or propagated per-target mask. |
-| Neutral-truth mask `X1` | Missing | There is no representation of true `t1` terms removed from scoring. |
+| `D_score` and scored direct truth | Implemented | Named event profiles construct canonical aspect-specific direct truth without promoting `direct_candidates` to final truth. |
+| Prior-known mask `K0` | Implemented | `all_usable_positive_t0` is independent of event evidence and includes IEA while excluding NAS/ND/NOT-derived states. |
+| Neutral-truth mask `X1` | Implemented | Named neutral policies construct `D_neutral1`; `X1` is its closure minus `G_candidate`. |
 | Branch-exclusive neutral closure | Missing | The required `C(D_neutral1) - C(D_score)` operation is absent. The original Word graph motivates this behavior, but current code has no mask layer. |
-| Global terms of interest `Q` and final mask `M` | Missing | No global universe, root exclusion, ontology-cutoff validity, or per-target evaluable universe exists. |
+| Global terms of interest `Q` and final mask `M` | Implemented | Immutable aspect universes use approved preflight reachability; roots remain outside Q and `M = Q - K0 - X1`. |
 | Prior-known versus neutral precedence | Missing | The code cannot distinguish terms always masked at `t0` from later neutral truth shared with scored closure. |
 | Low-information filtering | Missing | There is no benchmark eligibility filter or per-aspect threshold configuration. |
 | Manual include/exclude GO files | Missing | No parser, checksum, precedence rule, or audit record exists. |

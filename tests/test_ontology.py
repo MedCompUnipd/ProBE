@@ -123,17 +123,13 @@ def test_information_content_and_simgic_use_annotation_closure():
     )
 
     counts = ontology.cumulative_counts({"GO:0000002": 3, "GO:0000003": 1})
-    information = ontology.information_content(
-        {"GO:0000002": 3, "GO:0000003": 1}
-    )
+    information = ontology.information_content({"GO:0000002": 3, "GO:0000003": 1})
 
     assert counts["GO:0008150"] == 4
     assert counts["GO:0000001"] == 3
     assert information["GO:0008150"] == 0
     assert information["GO:0000001"] == -math.log(4 / 5)
-    assert ontology.simgic(
-        ["GO:0000002"], ["GO:0000001"], information
-    ) == 0.5
+    assert ontology.simgic(["GO:0000002"], ["GO:0000001"], information) == 0.5
 
 
 def test_ontology_validation_rejects_propagation_cycles():

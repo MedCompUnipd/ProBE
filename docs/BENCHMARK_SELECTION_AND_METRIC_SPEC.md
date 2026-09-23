@@ -53,7 +53,7 @@ If a later ontology is intentionally used, that choice changes the scientific
 question and must be identified as a separate benchmark profile.
 
 Record the checksums and release identifiers of all inputs. Do not use the
-mutable `go-plus.owl` PURL as the identity of a published benchmark; pin the
+mutable `go.owl` PURL as the identity of a published benchmark; pin the
 retrieved file and record its version IRI and SHA-256.
 
 ## Protein identity and alias scope

@@ -33,6 +33,7 @@ class FastaParser:
         *,
         report: ValidationReport | None = None,
         strict: bool = True,
+        track_duplicates: bool = True,
     ) -> Iterator[SequenceRecord]:
         source = Source.from_value(source)
         report = report if report is not None else ValidationReport()
@@ -53,7 +54,7 @@ class FastaParser:
                     source=source.name,
                     line=header_line,
                 )
-            elif identifier in seen:
+            elif track_duplicates and identifier in seen:
                 report.error(
                     "DUPLICATE_FASTA_IDENTIFIER",
                     f"duplicate FASTA identifier {identifier!r}",
@@ -77,9 +78,15 @@ class FastaParser:
                 )
             if strict:
                 report.raise_for_errors()
-            if not identifier or not sequence or invalid or identifier in seen:
+            if (
+                not identifier
+                or not sequence
+                or invalid
+                or (track_duplicates and identifier in seen)
+            ):
                 return None
-            seen.add(identifier)
+            if track_duplicates:
+                seen.add(identifier)
             return SequenceRecord(
                 identifier=identifier,
                 sequence=sequence,

@@ -9,6 +9,7 @@ from enum import StrEnum
 class Severity(StrEnum):
     """Severity of a validation issue."""
 
+    INFO = "info"
     WARNING = "warning"
     ERROR = "error"
 
@@ -78,6 +79,16 @@ class ValidationReport:
     ) -> ValidationIssue:
         return self.add(code, message, Severity.WARNING, source=source, line=line)
 
+    def info(
+        self,
+        code: str,
+        message: str,
+        *,
+        source: str | None = None,
+        line: int | None = None,
+    ) -> ValidationIssue:
+        return self.add(code, message, Severity.INFO, source=source, line=line)
+
     def extend(self, other: ValidationReport) -> None:
         self.issues.extend(other.issues)
 
@@ -90,6 +101,10 @@ class ValidationReport:
         return tuple(
             issue for issue in self.issues if issue.severity is Severity.WARNING
         )
+
+    @property
+    def infos(self) -> tuple[ValidationIssue, ...]:
+        return tuple(issue for issue in self.issues if issue.severity is Severity.INFO)
 
     @property
     def is_valid(self) -> bool:
