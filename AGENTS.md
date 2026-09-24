@@ -166,6 +166,42 @@ Do not introduce pandas as the internal model, a separate CLI implementation,
 persistence technology before profiling realistic releases, or dependencies without
 a documented need. Tests must not depend on mutable network resources.
 
+## Development environment
+
+Use the existing project environment. Do not spend time probing, repairing, or
+reinstalling development tools unless the current task explicitly concerns the
+environment.
+
+Canonical tools:
+
+- Git: `/usr/bin/git`
+- ripgrep: `/usr/bin/rg`
+- Pixi: `$HOME/.pixi/bin/pixi`
+- Project Python: `.pixi/envs/default/bin/python`
+- Pytest: `.pixi/envs/default/bin/python -m pytest`
+- Ruff: `.pixi/envs/default/bin/ruff`
+
+For the complete project check, prefer:
+
+`$HOME/.pixi/bin/pixi run check`
+
+For focused checks, prefer direct use of the existing project environment, for
+example:
+
+- `.pixi/envs/default/bin/python -m pytest <tests>`
+- `.pixi/envs/default/bin/ruff check <paths>`
+- `.pixi/envs/default/bin/ruff format --check <paths>`
+
+Do not repeatedly search for alternative installations, modify `PATH`, create
+aliases, reinstall tools, or recreate the Pixi environment when these canonical
+locations are available.
+
+A warning about being unable to create PATH aliases on a read-only filesystem is
+non-fatal and must not trigger additional environment-repair attempts.
+
+If a required tool outside this list is unavailable, report it rather than
+attempting installation unless explicitly requested.
+
 ## Context and token efficiency
 
 Keep repository inspection narrowly scoped to the current task.
