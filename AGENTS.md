@@ -166,12 +166,36 @@ Do not introduce pandas as the internal model, a separate CLI implementation,
 persistence technology before profiling realistic releases, or dependencies without
 a documented need. Tests must not depend on mutable network resources.
 
+## Context and token efficiency
+
+Keep repository inspection narrowly scoped to the current task.
+
+- When the task names specific files, inspect those files first and only follow
+  directly relevant imports, interfaces, tests, or documentation when necessary.
+- Do not recursively inspect, search, summarize, or enumerate `data/`, `TESTING/`,
+  `__pycache__/`, or generated artifacts unless the task explicitly requires a
+  specific file from those locations.
+- Do not read or decompress complete biological datasets or archives such as
+  `*.dat.gz`, `*.gaf`, `*.fasta`, `*.owl`, `*.dmp`, `*.tar.gz`, or `*.zip`
+  merely to understand repository structure or implementation.
+- If real biological data are required for validation, inspect only the smallest
+  bounded sample necessary; prefer synthetic test fixtures for development.
+- Do not inspect `pixi.lock` unless the task concerns dependencies or environment
+  resolution.
+- Prefer targeted commands such as `git diff -- <paths>` and `rg <pattern> <paths>`
+  over repository-wide `tree`, `find`, `grep`, or recursive searches.
+- Do not reread unchanged documentation already established as authoritative
+  unless the current task depends on it.
+- Avoid reproducing large source files or datasets in responses. Report only the
+  relevant findings, changes, tests, and unresolved issues.
+
 ## Working method
 
-Before changing scientific behavior: inspect current code and tests; describe the
-current and intended behavior; identify biological and software risks; add tests;
-make the smallest coherent change; run `pixi run check`; and update documentation
-and the development ledger.
+Before changing scientific behavior: inspect only the current code, tests, and
+documentation directly relevant to the requested change; describe the current
+and intended behavior; identify biological and software risks; add tests; make
+the smallest coherent change; run `pixi run check`; and update documentation
+and the development ledger when required.
 
 Do not change stable decisions incidentally. Document ambiguous alternatives and
 ask the user rather than silently deciding. Do not claim completion without tests.
