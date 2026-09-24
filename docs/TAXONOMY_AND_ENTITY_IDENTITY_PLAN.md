@@ -3,9 +3,9 @@
 ## Scope
 
 This plan defines the minimal correction required to keep exact sequence
-identity while preventing annotation union across species. It does not change
-ontology, evidence, truth-set, metric, prediction-ingestion, or CLI policy.
-Implementation is deferred.
+identity while preventing annotation union across distinct resolved NCBI
+taxonomic contexts. It does not change ontology, evidence, truth-set, metric,
+prediction-ingestion, or CLI policy. Implementation is deferred.
 
 The two temporal roles are:
 
@@ -24,7 +24,7 @@ Release names and dates are configuration and provenance, not API concepts.
 | `preprocessing.py` | Streams GOA/FASTA and uses a disk-backed accession index. It filters by accession and ontology validity, not species. | It is suitable for large inputs but cannot establish species-scoped aliases. |
 | `pipeline.py` | Each release is matched independently, then `_merge_identities()` unions aliases by `(target_id, sequence_id)` across releases. | Release-specific aliases with the same sequence become one unscoped alias set. |
 | `comparison.py` | `_identity_lookup()` builds `subject_id -> sequence_id`; `_assertions()` groups by `(sequence_id, aspect, term_id)`. | GO annotations from all exact-sequence aliases can be merged before event classification. |
-| `knowledge.py`, `truth.py`, `masking.py` | Direct states, events, prior knowledge, `K0`, neutral truth, and final per-target truth are keyed/grouped by `sequence_id` and aspect. | A cross-species annotation can contaminate both the same-species annotation union and the prior-known leakage mask. |
+| `knowledge.py`, `truth.py`, `masking.py` | Direct states, events, prior knowledge, `K0`, neutral truth, and final per-target truth are keyed/grouped by `sequence_id` and aspect. | A taxonomically incompatible annotation can contaminate both the strict annotation union and the prior-known leakage mask. |
 | Existing tests | Exact matching, release-specific sequence change, GOA filtering, and truth/mask behavior are covered. No fixture gives the same full-length sequence to different species. | The cross-species merge defect is not detected. |
 
 No UniProt `.dat` parser or `.dat`-to-combined-FASTA workflow is present in the
@@ -41,38 +41,51 @@ generation path must not be introduced.
 3. Sequence identity and annotation-aggregation scope are distinct:
    `sequence_id` identifies the characters; `aggregation_key` identifies which
    annotations may be united.
-4. Annotation aggregation requires exact full-length sequence and the same NCBI
-   species anchor.
-5. Distinct accessions, loci, reviewed states, or UniProt sections do not block
-   merging inside that scope.
-6. Genus, family, order, or any higher rank never authorizes merging.
-7. Every raw TaxID and its source remain in provenance.
-8. Cross-species exact matches may remain visible for audit or later predictive
-   knowledge, but contribute neither assertions nor prior-known terms to the
-   target's same-species benchmark scope.
-9. Taxonomy resolution is snapshot-specific, deterministic, and never falls
-   back to taxon-name matching for deleted TaxIDs.
+4. `species_anchor` is required for lineage classification and audit, but does
+   not by itself authorize annotation aggregation.
+5. Strict annotation aggregation requires both exact full-length sequence and
+   the same resolved NCBI TaxID under the applicable taxonomy snapshot.
+6. Exact-sequence matches with different resolved TaxIDs are not merged, even
+   when those TaxIDs are strains, substrains, isolates, or other below-species
+   taxa sharing one species anchor.
+7. Distinct accessions, loci, reviewed states, or UniProt sections do not block
+   merging inside the same resolved taxonomic context.
+8. Genus, family, order, or any higher rank never authorizes merging.
+9. Every raw TaxID and its source remain in provenance.
+10. Taxonomically non-mergeable exact matches may remain visible for audit or
+    later predictive knowledge, but contribute neither assertions nor
+    prior-known terms to the target's strict benchmark scope.
+11. Taxonomy resolution is snapshot-specific, deterministic, and never falls
+    back to taxon-name matching for deleted TaxIDs.
+12. The same taxonomy-based aggregation rule applies uniformly to MF, BP, and
+    CC; there are no aspect-specific merging rules.
 
-## 3. Mergeable exact-sequence cluster
+## 3. Mergeable exact-sequence cluster and match dispositions
 
-For normalized full-length target sequence `S`, species anchor `T`, and one
+For normalized full-length target sequence `S`, resolved NCBI TaxID `R`, and one
 snapshot role, define:
 
 ```text
-C(S,T) = {r | normalized_full_length_sequence(r) = S
-              and species_anchor(raw_taxid(r), taxonomy_snapshot) = T}
+C(S,R) = {r | normalized_full_length_sequence(r) = S
+              and species_anchor(raw_taxid(r), taxonomy_snapshot).resolved_taxid = R}
 ```
 
 The annotation aggregation key is conceptually:
 
 ```text
-(sequence_identity, species_anchor_taxid)
+(sequence_identity, resolved_taxid)
 ```
 
-`SAME_SPECIES_EXACT_SEQUENCE` is the positive match disposition. `S` alone is
-still the sequence identifier but never the annotation-union key. There is no
-additional “same biological entity” versus “same-species sequence” distinction
-for exact full-length matches.
+`SAME_TAXON_EXACT_SEQUENCE` is the positive, mergeable disposition.
+`SAME_SPECIES_DIFFERENT_SUBTAXON_EXACT_SEQUENCE` applies when the resolved
+TaxIDs differ but their required species anchors are the same; it is not
+mergeable in the strict benchmark. `CROSS_SPECIES_EXACT_SEQUENCE` applies when
+the species anchors differ and is likewise not mergeable. `S` alone remains the
+sequence identifier but is never the annotation-union key.
+
+The species anchor remains required on every resolved match. It supports these
+lineage classifications, audit output, and future sensitivity analyses; it does
+not collapse different resolved TaxIDs into one strict aggregation scope.
 
 The cluster is formed independently in `start` and `end`, using that role's
 UniProt, GOA, and taxonomy snapshots. Temporal comparison links the two
@@ -102,16 +115,24 @@ node explicitly ranked `species`. Name similarity is never a recovery rule.
 
 Strain, substrain, isolate, serotype, and other below-species records resolve to
 the same anchor when their nearest ranked species ancestor is the same. Their
-raw and resolved TaxIDs remain distinct in provenance.
+raw and resolved TaxIDs remain distinct in provenance. Sharing that anchor does
+not authorize strict annotation merging when their resolved TaxIDs differ.
 
-## 5. Cross-species exclusion
+## 5. Taxonomically non-mergeable exact matches
 
 An exact full-length match whose species anchor differs from the target anchor
 receives `CROSS_SPECIES_EXACT_SEQUENCE`. It remains in the match audit with its
 alias, raw TaxID, species anchor, source role, and sequence identity, but is not
-admitted to `C(S,T)`.
+admitted to `C(S,R)`.
 
-Consequently, its GOA assertions must not contribute to:
+An exact full-length match whose species anchor equals the target anchor but
+whose resolved TaxID differs receives
+`SAME_SPECIES_DIFFERENT_SUBTAXON_EXACT_SEQUENCE`. It retains the same audit and
+lineage provenance and is also excluded from `C(S,R)`. This includes different
+strains, substrains, isolates, serotypes, and other below-species contexts.
+
+Consequently, assertions from either non-mergeable disposition must not
+contribute to:
 
 - the direct assertion union;
 - event classification between `start` and `end`;
@@ -119,16 +140,18 @@ Consequently, its GOA assertions must not contribute to:
 - `K0` or any later truth/mask set.
 
 Taxonomic lowest common ancestor above species is audit information only. It is
-never a permission to merge.
+never a permission to merge. The same is true of a shared species anchor when
+the resolved TaxIDs differ.
 
 ## 6. Fragment policy
 
 Fragment handling is separate from full-length exact identity and must not
-weaken it.
+weaken it. The conservative fragment dispositions and confirmation threshold
+remain unchanged by the strict full-length taxonomy correction.
 
 | Disposition | Minimum interpretation | Annotation merge |
 | --- | --- | --- |
-| `SAME_SPECIES_EXACT_SEQUENCE` | Exact normalized full-length sequence and same species anchor | Yes |
+| `SAME_TAXON_EXACT_SEQUENCE` | Exact normalized full-length sequence and same resolved NCBI TaxID | Yes |
 | `CONFIRMED_SAME_PROTEIN_FRAGMENT` | Same species anchor, exact compatible region, and unambiguous protein association supported by locus/gene/record provenance or an explicit UniProt relationship | Yes, with fragment provenance |
 | `AMBIGUOUS_FRAGMENT` | Containment match without an unambiguous protein association, or multiple compatible proteins | No |
 | `CROSS_SPECIES_FRAGMENT` | Fragment and candidate full-length protein have different species anchors | No |
@@ -268,8 +291,8 @@ through existing transformations; it should not rewrite ontology or metrics.
 | --- | --- |
 | New taxonomy parser/service | Parse pinned `new_taxdump`; expose `species_anchor(raw_taxid, taxonomy_snapshot)` and auditable resolution records. |
 | New UniProt `.dat` parser, or extension of a located existing workflow | Stream Swiss-Prot and TrEMBL records into release-specific protein metadata while reusing combined-FASTA derivation. |
-| `records.py` | Add immutable protein/alias metadata, taxonomy resolution, fragment metadata, snapshot identity, and an `AnnotationAggregationKey(sequence_id, species_anchor_taxid)`. Preserve raw fields. |
-| `target_mapping.py` | Keep its exact sequence algorithm; join matches to metadata, require/resolve a target species anchor, and classify matches without returning cross-species accessions as mergeable. |
+| `records.py` | Add immutable protein/alias metadata, taxonomy resolution, fragment metadata, snapshot identity, and an `AnnotationAggregationKey(sequence_id, resolved_taxid)`. Preserve raw fields, including the required species anchor. |
+| `target_mapping.py` | Keep its exact sequence algorithm; join matches to metadata, require/resolve a target taxonomic context and species anchor, and classify matches without returning different-subtaxon or cross-species accessions as mergeable. |
 | `identity.py` | Keep sequence buckets; make aliases release- and taxon-aware. Replace global `aliases_for(sequence_id)` use in benchmark construction with scoped aliases for an aggregation key. |
 | `preprocessing.py` | Preserve streaming and disk-backed behavior; record/join authoritative metadata and taxonomy consistency without loading release-scale inputs into RAM. |
 | `pipeline.py` | Replace `t0`/`t1` public roles with `start`/`end`; accept the three explicit snapshot inputs per role; do not globally union role aliases before comparison. |
@@ -281,21 +304,23 @@ The minimum conceptual interfaces are:
 
 ```text
 species_anchor(raw_taxid, taxonomy_snapshot) -> TaxonResolution
-match_target(target, role_protein_metadata, target_species_anchor) -> MatchAudit
-mergeable_aliases(sequence_identity, species_anchor, role) -> aliases
-annotation_aggregation_key = (sequence_identity, species_anchor_taxid)
+match_target(target, role_protein_metadata, target_taxon_resolution) -> MatchAudit
+mergeable_aliases(sequence_identity, resolved_taxid, role) -> aliases
+annotation_aggregation_key = (sequence_identity, resolved_taxid)
 ```
 
-Cross-species matches are a separate audit collection, not an empty or weakened
-version of the same-species cluster.
+Different-subtaxon and cross-species matches are separate audit collections, not
+empty or weakened versions of the mergeable same-taxon cluster.
 
 ## 14. Synthetic tests required later
 
 | Case | Required outcome |
 | --- | --- |
-| Two accessions, exact full-length sequence, same species | Merge annotations; status `SAME_SPECIES_EXACT_SEQUENCE`. |
-| Distinct loci, exact full-length sequence, same species | Merge annotations. |
-| Strain and substrain TaxIDs under one ranked species | Resolve to one anchor and merge; preserve both raw TaxIDs. |
+| Two accessions, exact full-length sequence, same resolved TaxID | Merge annotations; status `SAME_TAXON_EXACT_SEQUENCE`. |
+| Distinct loci, exact full-length sequence, same resolved TaxID | Merge annotations. |
+| Distinct raw TaxIDs that resolve through `merged.dmp` to the same TaxID | Merge annotations; preserve both raw TaxIDs and merge paths. |
+| Strain and substrain TaxIDs under one ranked species | Resolve to one species anchor but do not merge; status `SAME_SPECIES_DIFFERENT_SUBTAXON_EXACT_SEQUENCE`; preserve both raw and resolved TaxIDs. |
+| Species-level TaxID and isolate-level TaxID under that species | Do not merge; status `SAME_SPECIES_DIFFERENT_SUBTAXON_EXACT_SEQUENCE`. |
 | Exact full-length sequence in two species of one genus | Do not merge; retain cross-species audit. |
 | Exact full-length sequence in two species of one family | Do not merge; never authorize via family LCA. |
 | Cross-species `start` annotation only | It does not enter prior state or `K0`. |
@@ -315,14 +340,16 @@ version of the same-species cluster.
 
 ## 15. Unresolved decisions requiring human approval
 
-1. **Target species source.** Decide whether every benchmark target must carry an
-   authoritative raw TaxID, or whether a target may acquire an anchor only when
-   all otherwise valid exact matches resolve uniquely to one species. Multiple
-   species must always cause quarantine; LCA inference above species is forbidden.
+1. **Target taxonomic-context source.** Decide whether every benchmark target
+   must carry an authoritative raw TaxID, or whether a target may acquire a
+   resolved taxonomic context only when all otherwise valid exact matches
+   resolve uniquely to one TaxID. Multiple resolved TaxIDs must always cause
+   quarantine, including when they share a species anchor; LCA inference is
+   forbidden as merge authorization.
 2. **Cross-snapshot species continuity.** Approve linking the independently
    resolved `start` and `end` clusters through the target, while retaining both
-   role-specific anchors, or define an explicit versioned cross-snapshot TaxID
-   reconciliation policy for species whose identifiers changed.
+   role-specific resolved TaxIDs and anchors, or define an explicit versioned
+   cross-snapshot TaxID reconciliation policy for taxa whose identifiers changed.
 3. **UniProt–GOA TaxID conflict.** Decide whether any mismatch is fatal for the
    assertion or whether narrowly defined, audited exceptions are permitted.
 4. **GAF multi-taxon semantics.** Approve using only the gene-product TaxID for
@@ -339,14 +366,14 @@ version of the same-species cluster.
    `.dat`-to-combined-FASTA workflow that must be reused; it is not present in
    this branch's tracked files.
 
-## Statements requiring revision after approval
+## Statements requiring revision in other documents
 
-No authoritative document is changed by this plan. After approval, revise these
-specific statements:
+This plan records the approved strict rule. The following documents remain to be
+aligned in separately scoped changes:
 
 | Document | Statement or contract to revise |
 | --- | --- |
-| `AGENTS.md` | “The internal key must be based on normalized protein sequence...” remains true for sequence identity, but must be followed by the species-scoped annotation-aggregation rule. “Associate each sequence identity with historical and current aliases” must require release and taxonomy scope. |
-| `docs/SCIENTIFIC_DECISIONS.md` | In “Exact sequence identity,” “The same exact sequence may correspond to multiple aliases” must distinguish a global match/audit set from mergeable same-species aliases. |
-| `docs/BENCHMARK_SELECTION_AND_METRIC_SPEC.md` | Replace the configurable LCA rule, especially “Same-family matches may be accepted...”, with strict nearest-ranked-species anchoring. Change annotation/assertion keys from `sequence_id` to the aggregation key, extend output tables with raw/resolved/anchor taxonomy provenance, and rename temporal roles to `start`/`end`. |
-| `docs/TRUTH_MASK_IMPLEMENTATION_PLAN.md` | Replace “Let `p` be an exact sequence identity,” grouping “by sequence and aspect,” and the `sequence_id`-only records/functions with aggregation-key scope. Define `K0` from same-species `start` assertions only, and rename temporal roles to `start`/`end`. The ontology and set formulas do not otherwise change. |
+| `AGENTS.md` | “The internal key must be based on normalized protein sequence...” remains true for sequence identity, but must be followed by the resolved-taxonomic-context annotation-aggregation rule. “Associate each sequence identity with historical and current aliases” must require release and taxonomy scope. |
+| `docs/SCIENTIFIC_DECISIONS.md` | In “Exact sequence identity,” “The same exact sequence may correspond to multiple aliases” must distinguish a global match/audit set from aliases mergeable only within one resolved TaxID. |
+| `docs/BENCHMARK_SELECTION_AND_METRIC_SPEC.md` | Replace the configurable LCA rule, especially “Same-family matches may be accepted...”, with strict same-resolved-TaxID aggregation. Change annotation/assertion keys from `sequence_id` to the aggregation key, extend output tables with raw/resolved/anchor taxonomy provenance, and rename temporal roles to `start`/`end`. |
+| `docs/TRUTH_MASK_IMPLEMENTATION_PLAN.md` | Replace “Let `p` be an exact sequence identity,” grouping “by sequence and aspect,” and the `sequence_id`-only records/functions with aggregation-key scope. Define `K0` from same-resolved-taxon `start` assertions only, and rename temporal roles to `start`/`end`. The ontology and set formulas do not otherwise change. |

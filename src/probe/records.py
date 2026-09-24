@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
+
+
+class UniProtSection(StrEnum):
+    """Caller-supplied UniProtKB section provenance."""
+
+    SWISS_PROT = "Swiss-Prot"
+    TREMBL = "TrEMBL"
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,6 +18,27 @@ class SequenceRecord:
     identifier: str
     sequence: str
     description: str = ""
+    source: str | None = None
+    line: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class UniProtRecord:
+    """Metadata and exact sequence parsed from one UniProtKB flat-file entry."""
+
+    primary_accession: str
+    secondary_accessions: tuple[str, ...]
+    entry_name: str
+    sequence: str
+    sequence_length: int
+    sequence_sha256: str
+    raw_taxid: str
+    section: UniProtSection
+    gene_name: str | None = None
+    gene_synonyms: tuple[str, ...] = ()
+    ordered_locus_names: tuple[str, ...] = ()
+    orf_names: tuple[str, ...] = ()
+    is_fragment: bool = False
     source: str | None = None
     line: int | None = None
 
