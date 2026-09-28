@@ -42,7 +42,8 @@ Define the following times and inputs:
 - `UNI0`: sequence and alias release associated with `t0`;
 - `UNI1`: sequence and alias release associated with `t1`;
 - `O`: one immutable official GO ontology snapshot used throughout the run;
-- `TG`: input target sequences.
+- `TG`: input target records, each with a protein sequence and explicit NCBI
+  TaxID; an optional UniProt accession is an alias or consistency check only.
 
 The ontology `O` should normally be the ontology made available to predictors at
 the prediction cutoff. A GO term introduced only after `t0` was not a valid
@@ -60,7 +61,16 @@ retrieved file and record its version IRI and SHA-256.
 
 Resolve targets by exact normalized sequence identity. The primary key is the
 sequence hash plus sequence length and normalization-policy version. Accessions
-are aliases.
+are aliases, never identity keys. A free-text species name is not a substitute
+for the required input NCBI TaxID.
+
+For strict eligibility, resolve the input TaxID in the NCBI taxonomy snapshot
+associated with `start`. Official `merged.dmp` reconciliation is allowed, but a
+deleted or unresolved TaxID must not be guessed. Strict targets must be
+full-length proteins: targets explicitly identified as fragments are ineligible.
+They require an exact full-length, non-fragment UniProt match at `start` in the
+approved resolved taxonomic context. Database-fragment handling is future work
+and is outside this specification's strict profile.
 
 Use both `UNI0` and `UNI1` when possible. Searching only `UNI1` can miss retired
 identifiers, hide sequence changes under an accession, or incorrectly interpret
@@ -73,13 +83,19 @@ sequence_identity -> source_release -> accession -> record metadata
 ```
 
 An identical sequence can occur in more than one taxon. Therefore, a sequence
-hash alone does not always determine species. If the target has an authoritative
-taxon, use it to constrain alias resolution. Otherwise, resolve every alias taxon
-through a pinned NCBI Taxonomy snapshot and calculate their lowest common
-ancestor. Same-family matches may be accepted by a configurable taxonomic-scope
-policy, but every taxon must remain in provenance. Matches extending beyond the
-approved lineage rank are quarantined instead of assigning one species
-arbitrarily.
+hash alone does not determine taxonomic context; the required resolved input
+TaxID constrains alias resolution. Strict aggregation accepts only the approved
+resolved taxonomic context. `species_anchor` is classification and audit metadata,
+not permission to merge strains, substrains, or other records with different
+resolved TaxIDs. Incompatible exact-sequence matches remain in provenance and do
+not supply strict annotations.
+
+If `start` TaxID resolution fails, the exact sequence is absent, only fragment
+matches exist, or exact matches exist only in incompatible taxonomy, assign an
+explicit eligibility status and report it for user action. Do not silently
+discard or repair the target. For the primary strict temporal benchmark, also
+trace the same sequence/taxonomic entity at `end`; absence at `end` is reported
+separately and is not interpreted as new functional knowledge.
 
 ## Independent evaluation by GO aspect
 
@@ -656,6 +672,7 @@ sequence_sha256
 sequence_length
 target_taxon_id
 identity_status
+eligibility_status
 ```
 
 ### Alias table
@@ -669,6 +686,15 @@ taxon_id
 canonical_or_isoform
 reviewed_status
 ```
+
+### Eligibility report
+
+Produce a structured, auditable eligibility/exclusion report or log for every
+input target. It records the supplied and resolved TaxID, taxonomy snapshot and
+merge path where applicable, full-length/fragment determination, `start` and
+`end` exact-match dispositions, selected aliases, status, and exclusion or
+user-action reason. Incompatible, missing, fragment-only, and unresolved cases
+remain reportable records rather than being silently discarded.
 
 ### Assertion table
 

@@ -6,8 +6,12 @@ The authoritative implementation is branch `codex/modifiche-main`. The historica
 ProBE codebase is out of scope; only `reference/owlLibrary3.py` is retained as
 optional ontology reference material.
 
-ProBE works with arbitrary FASTA protein targets. CAFA datasets may be inputs or
-validation cases, but core code must contain no CAFA4- or CAFA5-specific branches.
+ProBE supports general protein-function benchmarks. For the strict benchmark,
+each target input requires a protein sequence and explicit NCBI TaxID; a free-text
+species name is not a substitute. A UniProt accession is optional and serves only
+as an alias or consistency check, never as the identity key. CAFA datasets may be
+inputs or validation cases, but core code must contain no CAFA4- or
+CAFA5-specific branches.
 
 ## Exact sequence identity
 
@@ -20,6 +24,27 @@ exact protein sequence, accompanied by sequence length and normalization-policy
 version. The same exact sequence may correspond to multiple aliases. A target with
 an unresolved accession may still match a historical or current record through an
 identical sequence. Exact identity and similarity are separate concepts.
+
+## Strict target eligibility and taxonomic context
+
+Strict targets must represent full-length proteins. A target explicitly identified
+as a fragment is ineligible. Database-fragment matching and reconciliation remain
+future work and are not part of the strict eligibility decision.
+
+Resolve the input TaxID against the NCBI taxonomy snapshot associated with
+`start`. Deterministic reconciliation through the official `merged.dmp` is
+allowed. Deleted or unresolved TaxIDs must not be guessed from a name or lineage.
+The target must have an exact full-length, non-fragment UniProt match at `start`
+in the approved resolved taxonomic context. `species_anchor` remains
+classification and audit metadata; a shared anchor does not authorize merging
+strain or substrain records with different resolved TaxIDs.
+
+For the primary strict temporal benchmark, the same sequence/taxonomic entity
+should also be traceable at `end`. Its absence at `end` is reported separately;
+it is not evidence of newly acquired functional knowledge. If `start` TaxID
+resolution fails, the exact sequence is absent, only fragment matches exist, or
+the sequence exists only in an incompatible taxonomy, assign and report an
+explicit status for user action. Do not silently discard or repair the target.
 
 ## Ambiguous residues
 
@@ -95,5 +120,6 @@ Every selected target receives a machine-readable explanation.
 
 Benchmark outputs record hashes of every input, ontology identity, GOA releases,
 sequence-normalization policy, evidence policy, relation policy, software version,
-parameters, and validation outcomes. Ambiguous cases are quarantined rather than
-silently selected or discarded.
+parameters, and validation outcomes. Eligibility and exclusion results must be
+available in a structured, auditable report or log. Ambiguous cases are
+quarantined rather than silently selected or discarded.

@@ -145,20 +145,12 @@ the resolved TaxIDs differ.
 
 ## 6. Fragment policy
 
-Fragment handling is separate from full-length exact identity and must not
-weaken it. The conservative fragment dispositions and confirmation threshold
-remain unchanged by the strict full-length taxonomy correction.
-
-| Disposition | Minimum interpretation | Annotation merge |
-| --- | --- | --- |
-| `SAME_TAXON_EXACT_SEQUENCE` | Exact normalized full-length sequence and same resolved NCBI TaxID | Yes |
-| `CONFIRMED_SAME_PROTEIN_FRAGMENT` | Same species anchor, exact compatible region, and unambiguous protein association supported by locus/gene/record provenance or an explicit UniProt relationship | Yes, with fragment provenance |
-| `AMBIGUOUS_FRAGMENT` | Containment match without an unambiguous protein association, or multiple compatible proteins | No |
-| `CROSS_SPECIES_FRAGMENT` | Fragment and candidate full-length protein have different species anchors | No |
-
-Sequence containment alone is insufficient. If the input target is itself a
-fragment and maps ambiguously to multiple proteins, strict benchmark
-construction quarantines the target instead of unioning their annotations.
+Strict targets must be full-length. An input target explicitly identified as a
+fragment is ineligible, and a full-length target with only fragment database
+matches does not pass strict eligibility. These outcomes remain explicit audit
+statuses rather than silent exclusions. Database-fragment matching,
+reconciliation, and any future fragment dispositions are deferred work; they do
+not weaken strict full-length exact identity.
 
 ## 7. `start`/`end` dataset model
 
@@ -329,10 +321,8 @@ empty or weakened versions of the mergeable same-taxon cluster.
 | TaxID only in `delnodes.dmp` | Quarantine as deleted-unresolved; no name fallback. |
 | Same raw TaxID resolved under independent role snapshots | Preserve both role-specific resolutions and snapshot identities. |
 | Target without an anchor and exact matches in multiple species | Quarantine under strict construction. |
-| Confirmed same-protein fragment | Merge only when all approved metadata and region checks pass. |
-| Containment-only or multiply mapped fragment | `AMBIGUOUS_FRAGMENT`; no merge. |
-| Cross-species fragment | No merge. |
-| Fragment target mapping to multiple proteins | Quarantine target; no annotation union. |
+| Input target explicitly identified as a fragment | Ineligible for the strict benchmark; retain an explicit audit status. |
+| Full-length target with fragment-only database matches | Ineligible for the strict benchmark; retain an explicit audit status. |
 | Secondary accession and primary accession in same scoped cluster | Resolve as aliases with complete release provenance. |
 | One accession changes sequence between roles | Keep role-specific sequence identities and aliases. |
 | UniProt and GOA primary species conflict | Quarantine/audit according to the approved conflict policy. |
@@ -355,10 +345,10 @@ empty or weakened versions of the mergeable same-taxon cluster.
 4. **GAF multi-taxon semantics.** Approve using only the gene-product TaxID for
    the species anchor while preserving interacting-taxon fields as assertion
    context.
-5. **Fragment confirmation threshold.** Specify the exact UniProt relationship
-   and gene/locus metadata combinations sufficient for
-   `CONFIRMED_SAME_PROTEIN_FRAGMENT`; until approved, all fragments remain
-   non-mergeable in strict mode.
+5. **Database-fragment handling.** Define any future fragment matching or
+   reconciliation separately. It is not part of strict target eligibility;
+   strict targets and strict database matches remain full-length and
+   non-fragment.
 6. **Missing or deleted taxonomy.** Approve strict quarantine when no ranked
    species anchor can be resolved. This plan recommends no manual/name-based
    recovery in benchmark construction.
@@ -366,14 +356,17 @@ empty or weakened versions of the mergeable same-taxon cluster.
    `.dat`-to-combined-FASTA workflow that must be reused; it is not present in
    this branch's tracked files.
 
-## Statements requiring revision in other documents
+## Remaining follow-up alignment
 
-This plan records the approved strict rule. The following documents remain to be
-aligned in separately scoped changes:
+The strict target-input, full-length, taxonomy-resolution, and same-resolved-
+TaxID decisions are recorded in `AGENTS.md`,
+`docs/SCIENTIFIC_DECISIONS.md`, and
+`docs/BENCHMARK_SELECTION_AND_METRIC_SPEC.md`. The following structural changes
+remain separately scoped future work:
 
 | Document | Statement or contract to revise |
 | --- | --- |
-| `AGENTS.md` | “The internal key must be based on normalized protein sequence...” remains true for sequence identity, but must be followed by the resolved-taxonomic-context annotation-aggregation rule. “Associate each sequence identity with historical and current aliases” must require release and taxonomy scope. |
-| `docs/SCIENTIFIC_DECISIONS.md` | In “Exact sequence identity,” “The same exact sequence may correspond to multiple aliases” must distinguish a global match/audit set from aliases mergeable only within one resolved TaxID. |
-| `docs/BENCHMARK_SELECTION_AND_METRIC_SPEC.md` | Replace the configurable LCA rule, especially “Same-family matches may be accepted...”, with strict same-resolved-TaxID aggregation. Change annotation/assertion keys from `sequence_id` to the aggregation key, extend output tables with raw/resolved/anchor taxonomy provenance, and rename temporal roles to `start`/`end`. |
+| `AGENTS.md` | Extend alias requirements with explicit release and taxonomy scope when the future aggregation implementation is designed. |
+| `docs/SCIENTIFIC_DECISIONS.md` | Refine the multiple-alias statement with the future distinction between a global match/audit set and aliases mergeable only within one resolved TaxID. |
+| `docs/BENCHMARK_SELECTION_AND_METRIC_SPEC.md` | Change annotation/assertion keys from `sequence_id` to the aggregation key, extend output tables with raw/resolved/anchor taxonomy provenance, and rename temporal roles to `start`/`end`. |
 | `docs/TRUTH_MASK_IMPLEMENTATION_PLAN.md` | Replace “Let `p` be an exact sequence identity,” grouping “by sequence and aspect,” and the `sequence_id`-only records/functions with aggregation-key scope. Define `K0` from same-resolved-taxon `start` assertions only, and rename temporal roles to `start`/`end`. The ontology and set formulas do not otherwise change. |

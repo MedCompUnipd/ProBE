@@ -20,7 +20,9 @@ protein-function benchmarks. It is not specific to CAFA4 or CAFA5.
 
 The system must:
 
-1. Read arbitrary target proteins from FASTA.
+1. Read strict-benchmark target proteins from FASTA or an equivalent target input,
+   requiring a protein sequence and explicit NCBI TaxID; free-text species names
+   and optional UniProt accessions are not identity keys.
 2. Establish exact sequence identities using deterministic hashing.
 3. Associate each sequence identity with historical and current aliases.
 4. Inspect annotations associated with those aliases in two GOA releases.
