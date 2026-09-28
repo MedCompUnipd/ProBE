@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
+import io
 import json
 import os
 import platform
@@ -21,6 +23,10 @@ from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, Literal
+
+from probe.parsing.uniprot import UniProtDatParser
+from probe.records import UniProtRecord, UniProtSection
+from probe.source import Source
 
 MANIFEST_SCHEMA_VERSION = 1
 SNAPSHOT_ROLES = ("start", "end")
@@ -112,6 +118,16 @@ class AcquisitionResult:
     role: SnapshotRole
     manifest_path: Path
     manifest: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class CombinedUniProtFastaResult:
+    """Provenance of one derived combined UniProt FASTA artifact."""
+
+    role: SnapshotRole
+    output_path: Path
+    sha256: str
+    record_count: int
 
 
 def _require_table(value: object, field: str) -> Mapping[str, Any]:
@@ -957,6 +973,157 @@ def _previous_artifact(
     return value if isinstance(value, dict) else None
 
 
+def _uniprot_dat_records(
+    manifest: Mapping[str, Any],
+) -> tuple[tuple[UniProtSection, Mapping[str, Any]], ...]:
+    artifacts = manifest.get("artifacts")
+    if not isinstance(artifacts, dict):
+        raise AcquisitionError("manifest has no artifact table")
+    direct = (
+        (UniProtSection.SWISS_PROT, artifacts.get("uniprot_swissprot")),
+        (UniProtSection.TREMBL, artifacts.get("uniprot_trembl")),
+    )
+    if all(isinstance(record, dict) for _, record in direct):
+        return tuple((section, record) for section, record in direct)  # type: ignore[misc]
+
+    extracted = manifest.get("uniprot_extracted")
+    if not isinstance(extracted, list):
+        raise AcquisitionError("manifest has no UniProt DAT artifacts")
+    by_key = {
+        record.get("artifact"): record
+        for record in extracted
+        if isinstance(record, dict)
+    }
+    records = (
+        (UniProtSection.SWISS_PROT, by_key.get("uniprot_swissprot")),
+        (UniProtSection.TREMBL, by_key.get("uniprot_trembl")),
+    )
+    if not all(isinstance(record, dict) for _, record in records):
+        raise AcquisitionError(
+            "manifest has incomplete extracted UniProt DAT artifacts"
+        )
+    return tuple((section, record) for section, record in records)  # type: ignore[misc]
+
+
+def _uniprot_fasta_header(record: UniProtRecord) -> str:
+    prefix = "sp" if record.section is UniProtSection.SWISS_PROT else "tr"
+    return (
+        f">{prefix}|{record.primary_accession}|{record.entry_name} "
+        f"OX={record.raw_taxid}"
+    )
+
+
+def _derived_fasta_record(
+    output_path: Path,
+    data_root: Path,
+    source_records: tuple[tuple[UniProtSection, Mapping[str, Any]], ...],
+    record_count: int,
+) -> dict[str, Any]:
+    source_files = []
+    for section, record in source_records:
+        local_path = record.get("local_path")
+        sha256 = record.get("sha256")
+        if not isinstance(local_path, str) or not isinstance(sha256, str):
+            raise AcquisitionError("UniProt DAT provenance is incomplete")
+        source_files.append(
+            {
+                "local_path": local_path,
+                "section": section.value,
+                "sha256": sha256,
+            }
+        )
+    return {
+        "artifact": "uniprot_combined_fasta",
+        "generation_status": "complete",
+        "header_format": ">{sp|tr}|PRIMARY_ACCESSION|ENTRY_NAME OX=RAW_TAXID",
+        "local_path": _relative(output_path, data_root),
+        "record_count": record_count,
+        "sha256": _sha256(output_path),
+        "size_bytes": output_path.stat().st_size,
+        "source_files": source_files,
+    }
+
+
+def generate_combined_uniprot_fasta(
+    config: AcquisitionConfig,
+    role: SnapshotRole,
+) -> CombinedUniProtFastaResult:
+    """Stream manifest-selected UniProt DAT files into one derived FASTA."""
+
+    paths = create_snapshot_layout(config.data_root, role)
+    manifest = _load_manifest(paths.manifest)
+    if manifest is None:
+        raise AcquisitionError(f"manifest does not exist: {paths.manifest}")
+    if manifest.get("snapshot_role") != role:
+        raise AcquisitionError(f"manifest role mismatch in {paths.manifest}")
+
+    source_records = _uniprot_dat_records(manifest)
+    sources: list[tuple[UniProtSection, Source]] = []
+    for section, record in source_records:
+        local_path = record.get("local_path")
+        if not isinstance(local_path, str):
+            raise AcquisitionError("UniProt DAT manifest path is invalid")
+        source_path = config.data_root / local_path
+        if not _record_matches_file(record, source_path):
+            raise AcquisitionError(
+                f"UniProt DAT checksum or size mismatch: {source_path}"
+            )
+        sources.append((section, Source(source_path)))
+
+    output_path = paths.uniprot_derived / "combined.fasta.gz"
+    temporary = output_path.with_name(output_path.name + ".part")
+    record_count = 0
+    try:
+        with temporary.open("wb") as raw_output:
+            with (
+                gzip.GzipFile(
+                    filename="", mode="wb", fileobj=raw_output, mtime=0, compresslevel=9
+                ) as compressed_output,
+                io.TextIOWrapper(
+                    compressed_output, encoding="utf-8", newline="\n"
+                ) as output,
+            ):
+                for section, source in sources:
+                    for record in UniProtDatParser(section).iter_records(source):
+                        output.write(_uniprot_fasta_header(record))
+                        output.write("\n")
+                        output.write(record.sequence)
+                        output.write("\n")
+                        record_count += 1
+                output.flush()
+            raw_output.flush()
+            os.fsync(raw_output.fileno())
+        os.replace(temporary, output_path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+    derived_record = _derived_fasta_record(
+        output_path, config.data_root, source_records, record_count
+    )
+    existing_derived = manifest.get("derived")
+    derived = (
+        [record for record in existing_derived if isinstance(record, dict)]
+        if isinstance(existing_derived, list)
+        else []
+    )
+    derived = [
+        record
+        for record in derived
+        if record.get("artifact") != "uniprot_combined_fasta"
+    ]
+    derived.append(derived_record)
+    updated_manifest = dict(manifest)
+    updated_manifest["derived"] = sorted(derived, key=lambda record: record["artifact"])
+    _write_json_atomic(paths.manifest, updated_manifest)
+    return CombinedUniProtFastaResult(
+        role=role,
+        output_path=output_path,
+        sha256=derived_record["sha256"],
+        record_count=record_count,
+    )
+
+
 def acquire_snapshot(
     config: AcquisitionConfig,
     role: SnapshotRole,
@@ -972,8 +1139,8 @@ def acquire_snapshot(
     artifacts: dict[str, Any] = {}
     relationships: list[dict[str, str]] = []
     warnings = [
-        "Combined UniProt FASTA generation is deferred: no reusable .dat-to-FASTA "
-        "implementation exists in the active repository."
+        "Combined UniProt FASTA is derived explicitly after acquisition from the "
+        "authoritative UniProt DAT artifacts."
     ]
     warnings.extend(
         f"Source URL for {key} appears mutable; these retrieved bytes are frozen "
@@ -1093,12 +1260,28 @@ def acquire_snapshot(
             progress=progress,
         )
 
+    derived: list[Any] = []
+    if previous and isinstance(previous.get("derived"), list):
+        previous_uniprot = {
+            "artifacts": previous.get("artifacts"),
+            "uniprot_extracted": previous.get("uniprot_extracted"),
+        }
+        current_uniprot = {
+            "artifacts": artifacts,
+            "uniprot_extracted": uniprot_extracted,
+        }
+        if _uniprot_dat_records(previous_uniprot) == _uniprot_dat_records(
+            current_uniprot
+        ):
+            derived = previous["derived"]
+
     unchanged = bool(
         previous
         and previous.get("requested") == _requested(snapshot)
         and previous.get("artifacts") == artifacts
         and previous.get("uniprot_extracted") == uniprot_extracted
         and previous.get("taxonomy_extracted") == taxonomy_extracted
+        and previous.get("derived") == derived
     )
     acquisition_timestamp = (
         previous.get("acquisition_timestamp") if unchanged else _timestamp()
@@ -1106,7 +1289,7 @@ def acquire_snapshot(
     manifest: dict[str, Any] = {
         "acquisition_timestamp": acquisition_timestamp,
         "artifacts": artifacts,
-        "derived": [],
+        "derived": derived,
         "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
         "relationships": sorted(
             relationships, key=lambda item: (item["input"], item["output"])
@@ -1160,9 +1343,7 @@ def _expected_sources(snapshot: SnapshotConfig) -> dict[str, SourceSpec]:
     return values
 
 
-def validate_snapshot(
-    config: AcquisitionConfig, role: SnapshotRole
-) -> tuple[str, ...]:
+def validate_snapshot(config: AcquisitionConfig, role: SnapshotRole) -> tuple[str, ...]:
     """Validate manifest, source choices, files, and extractions without writes."""
 
     snapshot = config.snapshots[role]
@@ -1215,6 +1396,34 @@ def validate_snapshot(
         raise AcquisitionError(
             f"taxonomy extraction for {role} is missing: {', '.join(missing)}"
         )
+    derived = manifest.get("derived")
+    if not isinstance(derived, list):
+        raise AcquisitionError(f"manifest has invalid derived artifacts for {role}")
+    expected_sources = [
+        {
+            "local_path": str(record["local_path"]),
+            "section": section.value,
+            "sha256": str(record["sha256"]),
+        }
+        for section, record in _uniprot_dat_records(manifest)
+    ]
+    for record in derived:
+        if not isinstance(record, dict):
+            raise AcquisitionError(f"manifest has invalid derived artifact for {role}")
+        if record.get("artifact") != "uniprot_combined_fasta":
+            continue
+        local_path = record.get("local_path")
+        if not isinstance(local_path, str):
+            raise AcquisitionError(f"derived FASTA path is invalid for {role}")
+        if record.get("generation_status") != "complete":
+            raise AcquisitionError(f"derived FASTA is incomplete for {role}")
+        if not _record_matches_file(record, config.data_root / local_path):
+            raise AcquisitionError(
+                f"derived FASTA checksum or size mismatch for {role}"
+            )
+        if record.get("source_files") != expected_sources:
+            raise AcquisitionError(f"derived FASTA provenance mismatch for {role}")
+        messages.append(f"verified {role}/uniprot_combined_fasta")
     return tuple(messages)
 
 
