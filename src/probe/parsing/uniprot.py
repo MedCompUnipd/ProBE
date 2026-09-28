@@ -17,7 +17,7 @@ from probe.validation import ValidationReport
 
 _ID_PATTERN = re.compile(r"^(\S+)\s+(Reviewed|Unreviewed);\s+(\d+)\s+AA\.$")
 _SQ_LENGTH_PATTERN = re.compile(r"^SEQUENCE\s+(\d+)\s+AA;")
-_OX_TAXID_PATTERN = re.compile(r"(?:^|;\s*)NCBI_TaxID=([^;]+)")
+_OX_TAXID_PATTERN = re.compile(r"(?:^|;\s*)NCBI_TaxID=(\d+)(?:\s*\{[^{}]*\})?(?=;|$)")
 _GN_FIELD_PATTERN = re.compile(
     r"(?:^|;\s*)(Name|Synonyms|OrderedLocusNames|ORFNames)=([^;]+)"
 )

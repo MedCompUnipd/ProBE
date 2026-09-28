@@ -73,6 +73,50 @@ def test_trembl_fragment_record_and_gzip_input(tmp_path):
     assert record.is_fragment
 
 
+def test_ox_taxid_ignores_optional_evidence_tags(tmp_path):
+    evidence_one = SWISS_PROT_RECORD.replace(
+        "NCBI_TaxID=9606;",
+        "NCBI_TaxID=6239 {ECO:0000312|Proteomes:UP000001940};",
+    )
+    evidence_two = (
+        evidence_one.replace(
+            "ECO:0000312|Proteomes:UP000001940",
+            "ECO:0000256|HAMAP-Rule:MF_00001",
+        )
+        .replace("P12345; Q11111;", "P99999;")
+        .replace("AC   Q22222;\n", "")
+    )
+    path = tmp_path / "evidence.dat"
+    path.write_text(evidence_one + evidence_two, encoding="utf-8")
+
+    records = UniProtDatParser(UniProtSection.SWISS_PROT).parse(path)
+
+    assert [record.raw_taxid for record in records] == ["6239", "6239"]
+
+
+@pytest.mark.parametrize(
+    "ox_value",
+    (
+        "NCBI_TaxID=9606; NCBI_TaxID=10090;",
+        "NCBI_TaxID=9606,10090;",
+    ),
+)
+def test_ox_rejects_multiple_or_unusual_taxid_values(tmp_path, ox_value):
+    path = tmp_path / "invalid_taxid.dat"
+    path.write_text(
+        SWISS_PROT_RECORD.replace("NCBI_TaxID=9606;", ox_value),
+        encoding="utf-8",
+    )
+    report = ValidationReport()
+
+    records = UniProtDatParser(UniProtSection.SWISS_PROT).parse(
+        path, report=report, strict=False
+    )
+
+    assert records == ()
+    assert [issue.code for issue in report.errors] == ["INVALID_UNIPROT_TAXID_COUNT"]
+
+
 def test_multiple_records_stream_and_keep_identical_sequences_by_taxid(tmp_path):
     second = (
         SWISS_PROT_RECORD.replace("TEST_HUMAN", "TEST_MOUSE")
