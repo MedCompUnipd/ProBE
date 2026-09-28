@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import Self
 
@@ -39,6 +40,63 @@ class TaxonomySnapshotProvenance:
 
     snapshot_id: str | None
     sources: tuple[TaxonomySourceProvenance, ...]
+
+
+class TaxonomyResolutionStatus(StrEnum):
+    CURRENT = "CURRENT"
+    MERGED = "MERGED"
+    DELETED = "DELETED"
+    UNRESOLVED = "UNRESOLVED"
+
+
+@dataclass(frozen=True, slots=True)
+class TaxonomyResolution:
+    raw_taxid: str
+    resolved_taxid: str | None
+    merge_path: tuple[str, ...]
+    status: TaxonomyResolutionStatus
+
+
+class TaxonomyLineageStatus(StrEnum):
+    RESOLVED = "RESOLVED"
+    BROKEN = "BROKEN"
+    CYCLE = "CYCLE"
+    UNRESOLVED = "UNRESOLVED"
+
+
+@dataclass(frozen=True, slots=True)
+class TaxonomyLineage:
+    resolution: TaxonomyResolution
+    nodes: tuple[TaxonomyNode, ...]
+    status: TaxonomyLineageStatus
+
+
+class SpeciesAnchorStatus(StrEnum):
+    RESOLVED = "RESOLVED"
+    NO_SPECIES_ANCESTOR = "NO_SPECIES_ANCESTOR"
+    UNRESOLVED = "UNRESOLVED"
+
+
+@dataclass(frozen=True, slots=True)
+class SpeciesAnchor:
+    resolution: TaxonomyResolution
+    lineage: TaxonomyLineage
+    species_anchor: TaxonomyNode | None
+    status: SpeciesAnchorStatus
+
+
+class TaxonomicRelationship(StrEnum):
+    SAME_TAXON = "SAME_TAXON"
+    SAME_SPECIES_DIFFERENT_SUBTAXON = "SAME_SPECIES_DIFFERENT_SUBTAXON"
+    CROSS_SPECIES = "CROSS_SPECIES"
+    UNRESOLVED = "UNRESOLVED"
+
+
+@dataclass(frozen=True, slots=True)
+class TaxonomicRelationshipClassification:
+    left: SpeciesAnchor
+    right: SpeciesAnchor
+    relationship: TaxonomicRelationship
 
 
 def _fields(line: str) -> tuple[str, ...]:
@@ -330,6 +388,139 @@ class NcbiTaxonomyIndex:
             is not None
         )
 
+    def resolve_taxid(self, raw_taxid: str) -> TaxonomyResolution:
+        """Follow direct ``merged.dmp`` links without applying a merge policy."""
+
+        current = raw_taxid
+        merge_path: list[str] = []
+        seen: set[str] = set()
+        while True:
+            if current in seen:
+                return TaxonomyResolution(
+                    raw_taxid=raw_taxid,
+                    resolved_taxid=None,
+                    merge_path=tuple(merge_path),
+                    status=TaxonomyResolutionStatus.UNRESOLVED,
+                )
+            seen.add(current)
+            merged = self.merged_taxid(current)
+            if merged is not None:
+                if not merge_path:
+                    merge_path.append(current)
+                merge_path.append(merged)
+                current = merged
+                continue
+            if self.node(current) is not None:
+                return TaxonomyResolution(
+                    raw_taxid=raw_taxid,
+                    resolved_taxid=current,
+                    merge_path=tuple(merge_path),
+                    status=(
+                        TaxonomyResolutionStatus.MERGED
+                        if merge_path
+                        else TaxonomyResolutionStatus.CURRENT
+                    ),
+                )
+            return TaxonomyResolution(
+                raw_taxid=raw_taxid,
+                resolved_taxid=None,
+                merge_path=tuple(merge_path),
+                status=(
+                    TaxonomyResolutionStatus.DELETED
+                    if self.is_deleted(current)
+                    else TaxonomyResolutionStatus.UNRESOLVED
+                ),
+            )
+
+    def lineage(self, raw_taxid: str) -> TaxonomyLineage:
+        """Return inclusive parent lineage in child-to-root order."""
+
+        resolution = self.resolve_taxid(raw_taxid)
+        if resolution.resolved_taxid is None:
+            return TaxonomyLineage(
+                resolution=resolution,
+                nodes=(),
+                status=TaxonomyLineageStatus.UNRESOLVED,
+            )
+        nodes: list[TaxonomyNode] = []
+        seen: set[str] = set()
+        current = resolution.resolved_taxid
+        while True:
+            if current in seen:
+                return TaxonomyLineage(
+                    resolution=resolution,
+                    nodes=tuple(nodes),
+                    status=TaxonomyLineageStatus.CYCLE,
+                )
+            seen.add(current)
+            node = self.node(current)
+            if node is None:
+                return TaxonomyLineage(
+                    resolution=resolution,
+                    nodes=tuple(nodes),
+                    status=TaxonomyLineageStatus.BROKEN,
+                )
+            nodes.append(node)
+            if node.parent_taxid == node.taxid:
+                return TaxonomyLineage(
+                    resolution=resolution,
+                    nodes=tuple(nodes),
+                    status=TaxonomyLineageStatus.RESOLVED,
+                )
+            current = node.parent_taxid
+
+    def species_anchor(self, raw_taxid: str) -> SpeciesAnchor:
+        """Find the nearest explicit ``species`` ancestor for audit only."""
+
+        lineage = self.lineage(raw_taxid)
+        if lineage.status is not TaxonomyLineageStatus.RESOLVED:
+            return SpeciesAnchor(
+                resolution=lineage.resolution,
+                lineage=lineage,
+                species_anchor=None,
+                status=SpeciesAnchorStatus.UNRESOLVED,
+            )
+        anchor = next((node for node in lineage.nodes if node.rank == "species"), None)
+        return SpeciesAnchor(
+            resolution=lineage.resolution,
+            lineage=lineage,
+            species_anchor=anchor,
+            status=(
+                SpeciesAnchorStatus.RESOLVED
+                if anchor is not None
+                else SpeciesAnchorStatus.NO_SPECIES_ANCESTOR
+            ),
+        )
+
+    def classify_taxonomic_relationship(
+        self, left_raw_taxid: str, right_raw_taxid: str
+    ) -> TaxonomicRelationshipClassification:
+        """Classify taxonomic contexts without merging their associated records."""
+
+        left = self.species_anchor(left_raw_taxid)
+        right = self.species_anchor(right_raw_taxid)
+        if (
+            left.resolution.resolved_taxid is None
+            or right.resolution.resolved_taxid is None
+        ):
+            relationship = TaxonomicRelationship.UNRESOLVED
+        elif left.resolution.resolved_taxid == right.resolution.resolved_taxid:
+            relationship = TaxonomicRelationship.SAME_TAXON
+        elif (
+            left.status is not SpeciesAnchorStatus.RESOLVED
+            or right.status is not SpeciesAnchorStatus.RESOLVED
+            or left.species_anchor is None
+            or right.species_anchor is None
+        ):
+            relationship = TaxonomicRelationship.UNRESOLVED
+        elif left.species_anchor.taxid == right.species_anchor.taxid:
+            relationship = TaxonomicRelationship.SAME_SPECIES_DIFFERENT_SUBTAXON
+        else:
+            relationship = TaxonomicRelationship.CROSS_SPECIES
+        return TaxonomicRelationshipClassification(
+            left=left, right=right, relationship=relationship
+        )
+
     @property
     def provenance(self) -> TaxonomySnapshotProvenance:
         snapshot_row = self._connection.execute(
@@ -360,7 +551,15 @@ class NcbiTaxonomyIndex:
 
 __all__ = [
     "NcbiTaxonomyIndex",
+    "SpeciesAnchor",
+    "SpeciesAnchorStatus",
+    "TaxonomicRelationship",
+    "TaxonomicRelationshipClassification",
+    "TaxonomyLineage",
+    "TaxonomyLineageStatus",
     "TaxonomyNode",
+    "TaxonomyResolution",
+    "TaxonomyResolutionStatus",
     "TaxonomySnapshotProvenance",
     "TaxonomySourceProvenance",
 ]

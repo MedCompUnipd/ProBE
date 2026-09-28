@@ -5,7 +5,13 @@ import sqlite3
 
 import pytest
 
-from probe.taxonomy import NcbiTaxonomyIndex
+from probe.taxonomy import (
+    NcbiTaxonomyIndex,
+    SpeciesAnchorStatus,
+    TaxonomicRelationship,
+    TaxonomyLineageStatus,
+    TaxonomyResolutionStatus,
+)
 
 
 def _write_taxdump(tmp_path):
@@ -16,17 +22,26 @@ def _write_taxdump(tmp_path):
     nodes.write_text(
         "1\t|\t1\t|\tno rank\t|\n"
         "2\t|\t1\t|\tsuperkingdom\t|\n"
-        "9606\t|\t9605\t|\tspecies\t|\n",
+        "9605\t|\t1\t|\tgenus\t|\n"
+        "9606\t|\t9605\t|\tspecies\t|\n"
+        "123\t|\t9606\t|\tstrain\t|\n"
+        "124\t|\t123\t|\tsubstrain\t|\n"
+        "10088\t|\t1\t|\tgenus\t|\n"
+        "10090\t|\t10088\t|\tspecies\t|\n"
+        "555\t|\t404\t|\tno rank\t|\n"
+        "800\t|\t801\t|\tno rank\t|\n"
+        "801\t|\t800\t|\tno rank\t|\n",
         encoding="utf-8",
     )
     names.write_text(
         "1\t|\troot\t|\t\t|\tscientific name\t|\n"
         "2\t|\tBacteria\t|\t\t|\tscientific name\t|\n"
         "9606\t|\tHomo sapiens\t|\t\t|\tscientific name\t|\n"
+        "10090\t|\tMus musculus\t|\t\t|\tscientific name\t|\n"
         "9606\t|\thuman\t|\t\t|\tcommon name\t|\n",
         encoding="utf-8",
     )
-    merged.write_text("999\t|\t9606\t|\n", encoding="utf-8")
+    merged.write_text("998\t|\t999\t|\n999\t|\t9606\t|\n", encoding="utf-8")
     delnodes.write_text("666\t|\n", encoding="utf-8")
     return nodes, names, merged, delnodes
 
@@ -47,10 +62,11 @@ def _build(tmp_path, **kwargs):
 def test_taxonomy_index_stores_nodes_names_merges_deletions_and_provenance(tmp_path):
     with _build(tmp_path) as index:
         assert index.schema_version == 1
-        assert index.node("9606") is not None
-        assert index.node("9606").parent_taxid == "9605"  # type: ignore[union-attr]
-        assert index.node("9606").rank == "species"  # type: ignore[union-attr]
-        assert index.node("9606").scientific_name == "Homo sapiens"  # type: ignore[union-attr]
+        human = index.node("9606")
+        assert human is not None
+        assert human.parent_taxid == "9605"
+        assert human.rank == "species"
+        assert human.scientific_name == "Homo sapiens"
         root = index.node("1")
         assert root is not None
         assert root.parent_taxid == "1"
@@ -79,11 +95,11 @@ def test_taxonomy_index_rebuild_replaces_rows_deterministically(tmp_path):
 
     with sqlite3.connect(tmp_path / "taxonomy.sqlite3") as connection:
         assert connection.execute("SELECT COUNT(*) FROM taxonomy_nodes").fetchone() == (
-            3,
+            11,
         )
         assert connection.execute(
             "SELECT COUNT(*) FROM taxonomy_merged"
-        ).fetchone() == (1,)
+        ).fetchone() == (2,)
 
 
 def test_taxonomy_index_uses_only_local_taxdump_files(tmp_path, monkeypatch):
@@ -146,3 +162,87 @@ def test_taxonomy_index_failed_rebuild_preserves_previous_snapshot(tmp_path):
 
     with NcbiTaxonomyIndex(index_path) as index:
         assert index.node("9606") is not None
+
+
+def test_taxonomy_resolution_and_lineage_are_deterministic(tmp_path):
+    with _build(tmp_path) as index:
+        current = index.resolve_taxid("9606")
+        assert current.status is TaxonomyResolutionStatus.CURRENT
+        assert current.resolved_taxid == "9606"
+        assert current.merge_path == ()
+
+        one_step = index.resolve_taxid("999")
+        assert one_step.status is TaxonomyResolutionStatus.MERGED
+        assert one_step.resolved_taxid == "9606"
+        assert one_step.merge_path == ("999", "9606")
+
+        multi_step = index.resolve_taxid("998")
+        assert multi_step.status is TaxonomyResolutionStatus.MERGED
+        assert multi_step.resolved_taxid == "9606"
+        assert multi_step.merge_path == ("998", "999", "9606")
+
+        deleted = index.resolve_taxid("666")
+        assert deleted.status is TaxonomyResolutionStatus.DELETED
+        assert deleted.resolved_taxid is None
+        assert index.resolve_taxid("404").status is TaxonomyResolutionStatus.UNRESOLVED
+
+        lineage = index.lineage("123")
+        assert lineage.status is TaxonomyLineageStatus.RESOLVED
+        assert [node.taxid for node in lineage.nodes] == ["123", "9606", "9605", "1"]
+        assert [node.scientific_name for node in lineage.nodes][:2] == [
+            None,
+            "Homo sapiens",
+        ]
+
+
+def test_taxonomy_resolution_detects_merge_and_parent_cycles(tmp_path):
+    nodes, names, merged, delnodes = _write_taxdump(tmp_path)
+    merged.write_text("700\t|\t701\t|\n701\t|\t700\t|\n", encoding="utf-8")
+    with NcbiTaxonomyIndex.build(
+        tmp_path / "taxonomy.sqlite3",
+        nodes=nodes,
+        names=names,
+        merged=merged,
+        delnodes=delnodes,
+    ) as index:
+        cycle = index.resolve_taxid("700")
+        assert cycle.status is TaxonomyResolutionStatus.UNRESOLVED
+        assert cycle.merge_path == ("700", "701", "700")
+        broken = index.lineage("555")
+        assert broken.status is TaxonomyLineageStatus.BROKEN
+        assert [node.taxid for node in broken.nodes] == ["555"]
+        cyclic = index.lineage("800")
+        assert cyclic.status is TaxonomyLineageStatus.CYCLE
+        assert [node.taxid for node in cyclic.nodes] == ["800", "801"]
+
+
+def test_species_anchor_and_taxonomic_relationships(tmp_path):
+    with _build(tmp_path) as index:
+        strain_anchor = index.species_anchor("123")
+        assert strain_anchor.status is SpeciesAnchorStatus.RESOLVED
+        assert strain_anchor.species_anchor is not None
+        assert strain_anchor.species_anchor.taxid == "9606"
+        species_anchor = index.species_anchor("9606")
+        assert species_anchor.status is SpeciesAnchorStatus.RESOLVED
+        assert species_anchor.species_anchor is not None
+        assert species_anchor.species_anchor.taxid == "9606"
+        assert (
+            index.species_anchor("1").status is SpeciesAnchorStatus.NO_SPECIES_ANCESTOR
+        )
+
+        assert (
+            index.classify_taxonomic_relationship("123", "123").relationship
+            is TaxonomicRelationship.SAME_TAXON
+        )
+        assert (
+            index.classify_taxonomic_relationship("123", "124").relationship
+            is TaxonomicRelationship.SAME_SPECIES_DIFFERENT_SUBTAXON
+        )
+        assert (
+            index.classify_taxonomic_relationship("123", "10090").relationship
+            is TaxonomicRelationship.CROSS_SPECIES
+        )
+        assert (
+            index.classify_taxonomic_relationship("123", "404").relationship
+            is TaxonomicRelationship.UNRESOLVED
+        )
