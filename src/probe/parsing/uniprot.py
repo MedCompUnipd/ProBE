@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import re
-from collections.abc import Iterator
+import sqlite3
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Self
 
 from probe.parsing.fasta import PROTEIN_ALPHABET
-from probe.records import UniProtRecord, UniProtSection
+from probe.records import UniProtMetadataRecord, UniProtRecord, UniProtSection
 from probe.source import Source
 from probe.validation import ValidationReport
 
@@ -260,4 +263,251 @@ class UniProtDatParser:
         return tuple(self.iter_records(source, report=report, strict=strict))
 
 
-__all__ = ["UniProtDatParser", "UniProtSection"]
+_METADATA_SCHEMA_VERSION = 1
+
+
+class UniProtMetadataIndex:
+    """Disk-backed metadata index built from streaming UniProt DAT records."""
+
+    schema_version = _METADATA_SCHEMA_VERSION
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._connection = sqlite3.connect(self.path)
+        self._connection.row_factory = sqlite3.Row
+        self._validate_schema()
+
+    @classmethod
+    def build(
+        cls,
+        path: str | Path,
+        sources: Mapping[UniProtSection, Source | str | Path],
+    ) -> Self:
+        """Rebuild an index in one transaction without buffering a release."""
+
+        database_path = Path(path)
+        connection = sqlite3.connect(database_path)
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            cls._create_schema(connection)
+            ordered_sources = sorted(sources.items(), key=lambda item: item[0].value)
+            for section, source in ordered_sources:
+                for record in UniProtDatParser(section).iter_records(source):
+                    cls._insert_record(connection, record)
+            connection.commit()
+        except BaseException:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        return cls(database_path)
+
+    @staticmethod
+    def _create_schema(connection: sqlite3.Connection) -> None:
+        statements = (
+            "DROP TABLE IF EXISTS uniprot_accessions",
+            "DROP TABLE IF EXISTS uniprot_records",
+            "DROP TABLE IF EXISTS uniprot_metadata_schema",
+            """
+            CREATE TABLE uniprot_metadata_schema (
+                schema_version INTEGER NOT NULL
+            )
+            """,
+            """
+            CREATE TABLE uniprot_records (
+                record_id INTEGER PRIMARY KEY,
+                primary_accession TEXT NOT NULL,
+                entry_name TEXT NOT NULL,
+                sequence_length INTEGER NOT NULL,
+                sequence_sha256 TEXT NOT NULL,
+                raw_taxid TEXT NOT NULL,
+                section TEXT NOT NULL,
+                is_fragment INTEGER NOT NULL CHECK (is_fragment IN (0, 1)),
+                gene_name TEXT,
+                gene_synonyms_json TEXT NOT NULL,
+                ordered_locus_names_json TEXT NOT NULL,
+                orf_names_json TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                source_line INTEGER NOT NULL,
+                UNIQUE (source_path, source_line)
+            )
+            """,
+            """
+            CREATE TABLE uniprot_accessions (
+                accession TEXT NOT NULL,
+                record_id INTEGER NOT NULL REFERENCES uniprot_records(record_id),
+                is_primary INTEGER NOT NULL CHECK (is_primary IN (0, 1)),
+                PRIMARY KEY (accession, record_id)
+            )
+            """,
+            """
+            CREATE INDEX uniprot_records_primary_accession_idx
+                ON uniprot_records (primary_accession)
+            """,
+            """
+            CREATE INDEX uniprot_records_sequence_idx
+                ON uniprot_records (sequence_sha256, sequence_length)
+            """,
+            "CREATE INDEX uniprot_records_taxid_idx ON uniprot_records (raw_taxid)",
+            """
+            CREATE INDEX uniprot_records_fragment_idx
+                ON uniprot_records (is_fragment)
+            """,
+            """
+            CREATE INDEX uniprot_accessions_accession_idx
+                ON uniprot_accessions (accession, record_id)
+            """,
+        )
+        for statement in statements:
+            connection.execute(statement)
+        connection.execute(
+            "INSERT INTO uniprot_metadata_schema (schema_version) VALUES (?)",
+            (_METADATA_SCHEMA_VERSION,),
+        )
+
+    @staticmethod
+    def _insert_record(connection: sqlite3.Connection, record: UniProtRecord) -> None:
+        if record.source is None or record.line is None:
+            raise ValueError("UniProt metadata records require source path and line")
+        cursor = connection.execute(
+            """
+            INSERT INTO uniprot_records (
+                primary_accession, entry_name, sequence_length, sequence_sha256,
+                raw_taxid, section, is_fragment, gene_name, gene_synonyms_json,
+                ordered_locus_names_json, orf_names_json, source_path, source_line
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.primary_accession,
+                record.entry_name,
+                record.sequence_length,
+                record.sequence_sha256,
+                record.raw_taxid,
+                record.section.value,
+                int(record.is_fragment),
+                record.gene_name,
+                json.dumps(record.gene_synonyms),
+                json.dumps(record.ordered_locus_names),
+                json.dumps(record.orf_names),
+                record.source,
+                record.line,
+            ),
+        )
+        record_id = cursor.lastrowid
+        assert record_id is not None
+        connection.executemany(
+            """
+            INSERT INTO uniprot_accessions (accession, record_id, is_primary)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (record.primary_accession, record_id, 1),
+                *(
+                    (accession, record_id, 0)
+                    for accession in record.secondary_accessions
+                ),
+            ],
+        )
+
+    def _validate_schema(self) -> None:
+        try:
+            row = self._connection.execute(
+                "SELECT schema_version FROM uniprot_metadata_schema"
+            ).fetchone()
+        except sqlite3.DatabaseError as error:
+            self.close()
+            raise ValueError(
+                f"not a ProBE UniProt metadata index: {self.path}"
+            ) from error
+        if row is None or row["schema_version"] != self.schema_version:
+            self.close()
+            raise ValueError(f"unsupported UniProt metadata index: {self.path}")
+
+    def lookup_accession(self, accession: str) -> tuple[UniProtMetadataRecord, ...]:
+        return self._lookup(
+            """
+            SELECT records.*
+            FROM uniprot_records AS records
+            JOIN uniprot_accessions AS accessions
+                ON accessions.record_id = records.record_id
+            WHERE accessions.accession = ?
+            ORDER BY records.record_id
+            """,
+            (accession,),
+        )
+
+    def lookup_sequence(
+        self, sequence_sha256: str, sequence_length: int
+    ) -> tuple[UniProtMetadataRecord, ...]:
+        return self._lookup(
+            """
+            SELECT * FROM uniprot_records
+            WHERE sequence_sha256 = ? AND sequence_length = ?
+            ORDER BY record_id
+            """,
+            (sequence_sha256, sequence_length),
+        )
+
+    def lookup_taxid(self, raw_taxid: str) -> tuple[UniProtMetadataRecord, ...]:
+        return self._lookup(
+            "SELECT * FROM uniprot_records WHERE raw_taxid = ? ORDER BY record_id",
+            (raw_taxid,),
+        )
+
+    def lookup_fragment_status(
+        self, is_fragment: bool
+    ) -> tuple[UniProtMetadataRecord, ...]:
+        return self._lookup(
+            "SELECT * FROM uniprot_records WHERE is_fragment = ? ORDER BY record_id",
+            (int(is_fragment),),
+        )
+
+    def _lookup(
+        self, query: str, parameters: tuple[object, ...]
+    ) -> tuple[UniProtMetadataRecord, ...]:
+        return tuple(
+            self._row_to_record(row)
+            for row in self._connection.execute(query, parameters)
+        )
+
+    def _row_to_record(self, row: sqlite3.Row) -> UniProtMetadataRecord:
+        secondary_accessions = tuple(
+            accession_row["accession"]
+            for accession_row in self._connection.execute(
+                """
+                SELECT accession FROM uniprot_accessions
+                WHERE record_id = ? AND is_primary = 0
+                ORDER BY rowid
+                """,
+                (row["record_id"],),
+            )
+        )
+        return UniProtMetadataRecord(
+            record_id=row["record_id"],
+            primary_accession=row["primary_accession"],
+            secondary_accessions=secondary_accessions,
+            entry_name=row["entry_name"],
+            sequence_length=row["sequence_length"],
+            sequence_sha256=row["sequence_sha256"],
+            raw_taxid=row["raw_taxid"],
+            section=UniProtSection(row["section"]),
+            gene_name=row["gene_name"],
+            gene_synonyms=tuple(json.loads(row["gene_synonyms_json"])),
+            ordered_locus_names=tuple(json.loads(row["ordered_locus_names_json"])),
+            orf_names=tuple(json.loads(row["orf_names_json"])),
+            is_fragment=bool(row["is_fragment"]),
+            source=row["source_path"],
+            line=row["source_line"],
+        )
+
+    def close(self) -> None:
+        self._connection.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+__all__ = ["UniProtDatParser", "UniProtMetadataIndex", "UniProtSection"]

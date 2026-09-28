@@ -5,7 +5,7 @@ import gzip
 import pytest
 
 from probe.identity import sequence_digest
-from probe.parsing.uniprot import UniProtDatParser, UniProtSection
+from probe.parsing.uniprot import UniProtDatParser, UniProtMetadataIndex, UniProtSection
 from probe.validation import ValidationError, ValidationReport
 
 SWISS_PROT_RECORD = """\
@@ -115,3 +115,87 @@ def test_sequence_length_mismatch_is_rejected_and_reported(tmp_path):
     assert [issue.code for issue in report.errors] == [
         "UNIPROT_SEQUENCE_LENGTH_MISMATCH"
     ]
+
+
+def test_metadata_index_indexes_independent_records_and_rebuilds(tmp_path):
+    second_swiss_prot = (
+        SWISS_PROT_RECORD.replace("TEST_HUMAN", "TEST_MOUSE")
+        .replace("P12345; Q11111;", "P99999;")
+        .replace("AC   Q22222;\n", "")
+        .replace("NCBI_TaxID=9606", "NCBI_TaxID=10090")
+    )
+    swiss_prot_path = tmp_path / "uniprot_sprot.dat"
+    trembl_path = tmp_path / "uniprot_trembl.dat"
+    index_path = tmp_path / "uniprot.sqlite3"
+    swiss_prot_path.write_text(SWISS_PROT_RECORD + second_swiss_prot, encoding="utf-8")
+    trembl_path.write_text(TREMBL_FRAGMENT_RECORD, encoding="utf-8")
+    sources = {
+        UniProtSection.SWISS_PROT: swiss_prot_path,
+        UniProtSection.TREMBL: trembl_path,
+    }
+
+    with UniProtMetadataIndex.build(index_path, sources) as index:
+        assert index.schema_version == 1
+        secondary_matches = index.lookup_accession("Q11111")
+        assert [record.primary_accession for record in secondary_matches] == ["P12345"]
+        assert index.lookup_accession("P12345")[0].secondary_accessions == (
+            "Q11111",
+            "Q22222",
+        )
+        identical = index.lookup_sequence(sequence_digest("ACDEFGHIKL"), 10)
+        assert [
+            (record.primary_accession, record.raw_taxid) for record in identical
+        ] == [
+            ("P12345", "9606"),
+            ("P99999", "10090"),
+        ]
+        assert [record.primary_accession for record in index.lookup_taxid("83333")] == [
+            "A0A000"
+        ]
+        fragments = index.lookup_fragment_status(True)
+        non_fragments = index.lookup_fragment_status(False)
+        assert [record.primary_accession for record in fragments] == ["A0A000"]
+        assert {record.primary_accession for record in non_fragments} == {
+            "P12345",
+            "P99999",
+        }
+
+    with UniProtMetadataIndex.build(index_path, sources) as rebuilt:
+        assert len(rebuilt.lookup_sequence(sequence_digest("ACDEFGHIKL"), 10)) == 2
+        assert len(rebuilt.lookup_fragment_status(True)) == 1
+
+
+def test_metadata_index_build_consumes_parser_iterator(tmp_path, monkeypatch):
+    path = tmp_path / "uniprot_sprot.dat"
+    index_path = tmp_path / "uniprot.sqlite3"
+    second = SWISS_PROT_RECORD.replace("P12345; Q11111;", "P99999; Q11111;")
+    path.write_text(SWISS_PROT_RECORD + second, encoding="utf-8")
+
+    original_iter_records = UniProtDatParser.iter_records
+    original_insert_record = UniProtMetadataIndex._insert_record
+    inserted: list[str] = []
+
+    def tracking_iter_records(self, *args, **kwargs):
+        iterator = original_iter_records(self, *args, **kwargs)
+        yield next(iterator)
+        assert inserted == ["P12345"]
+        yield from iterator
+
+    def tracking_insert_record(connection, record):
+        inserted.append(record.primary_accession)
+        original_insert_record(connection, record)
+
+    monkeypatch.setattr(UniProtDatParser, "iter_records", tracking_iter_records)
+    monkeypatch.setattr(
+        UniProtMetadataIndex,
+        "_insert_record",
+        staticmethod(tracking_insert_record),
+    )
+
+    with UniProtMetadataIndex.build(
+        index_path, {UniProtSection.SWISS_PROT: path}
+    ) as index:
+        assert [record.primary_accession for record in index.lookup_taxid("9606")] == [
+            "P12345",
+            "P99999",
+        ]

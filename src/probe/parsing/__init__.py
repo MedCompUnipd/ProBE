@@ -3,7 +3,7 @@
 from probe.parsing.fasta import FastaParser
 from probe.parsing.gaf import GafParser
 from probe.parsing.owl import OwlLoader
-from probe.parsing.uniprot import UniProtDatParser
+from probe.parsing.uniprot import UniProtDatParser, UniProtMetadataIndex
 from probe.records import UniProtSection
 
 __all__ = [
@@ -11,5 +11,6 @@ __all__ = [
     "GafParser",
     "OwlLoader",
     "UniProtDatParser",
+    "UniProtMetadataIndex",
     "UniProtSection",
 ]

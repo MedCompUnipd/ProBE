@@ -44,6 +44,27 @@ class UniProtRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class UniProtMetadataRecord:
+    """One independently indexed UniProtKB record without its sequence text."""
+
+    record_id: int
+    primary_accession: str
+    secondary_accessions: tuple[str, ...]
+    entry_name: str
+    sequence_length: int
+    sequence_sha256: str
+    raw_taxid: str
+    section: UniProtSection
+    gene_name: str | None
+    gene_synonyms: tuple[str, ...]
+    ordered_locus_names: tuple[str, ...]
+    orf_names: tuple[str, ...]
+    is_fragment: bool
+    source: str
+    line: int
+
+
+@dataclass(frozen=True, slots=True)
 class AnnotationRecord:
     """A lossless representation of one GAF 2.x association row."""
 
