@@ -1,4 +1,4 @@
-"""Prepare local declared full-length targets for the ProBE pipeline."""
+"""Prepare strict canonical external targets for the ProBE pipeline."""
 
 from __future__ import annotations
 
