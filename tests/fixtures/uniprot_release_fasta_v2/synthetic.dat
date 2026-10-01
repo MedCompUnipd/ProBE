@@ -1,0 +1,70 @@
+ID   REVIEWED_ONE            Reviewed;          6 AA.
+AC   P00001; Q00001; P00001;
+DE   RecName: Full=Example fragment protein outside flags;
+DE   Flags: Fragment;
+GN   Name=GENE1 {ECO:0000313},GENE%1; Synonyms=SYN 1,SYN/2; OrderedLocusNames=LOC:1; ORFNames=ORF=1;
+OX   NCBI_TaxID=9606;
+PE   1: Evidence at protein level;
+DT   01-JAN-2000, sequence version 7.
+SQ   SEQUENCE   6 AA;  600 MW;  ABCDEF CRC64;
+     acd efg
+//
+ID   UNREVIEWED_TWO          Unreviewed;        4 AA.
+AC   A00002;
+DE   Flags: Fragments;
+GN   Name=GENE2;
+GN   and
+GN   Name=GENE3; ORFNames=ORF3;
+OX   NCBI_TaxID=111; NCBI_TaxID=222;
+PE   4: Predicted;
+DT   02-FEB-2001, sequence version 2.
+SQ   SEQUENCE   4 AA;  400 MW;  ABCDEF CRC64;
+     MNPQ
+//
+ID   PRECURSOR_ONLY          Reviewed;          5 AA.
+AC   P00003;
+DE   Flags: Precursor;
+PE   2: Evidence at transcript level;
+SQ   SEQUENCE   6 AA;  600 MW;  ABCDEF CRC64;
+     rstuv
+//
+ID   PRECURSOR_FRAGMENT      Reviewed;          3 AA.
+AC   P00004;
+DE   Contains: fragment peptide;
+DE   Flags: Precursor; Fragment;
+OX   NCBI_TaxID=3702;
+SQ   SEQUENCE   3 AA;  300 MW;  ABCDEF CRC64;
+     xyz
+//
+ID   PRECURSOR_FRAGMENTS     Reviewed;          3 AA.
+AC   P00010;
+DE   Flags: Precursor; Fragments;
+OX   NCBI_TaxID=3702;
+SQ   SEQUENCE   3 AA;  300 MW;  ABCDEF CRC64;
+     qwe
+//
+ID   MISLEADING_FRAGMENT     Unknown;           2 AA.
+AC   P00005;
+DE   RecName: Full=fragment protein;
+DE   Contains: fragment peptide;
+OX   NCBI_TaxID=562;
+SQ   SEQUENCE   2 AA;  200 MW;  ABCDEF CRC64;
+     aa
+//
+ID   NO_ACCESSION            Reviewed;          2 AA.
+SQ   SEQUENCE   2 AA;  200 MW;  ABCDEF CRC64;
+     BB
+//
+ID
+AC   P00007;
+SQ   SEQUENCE   2 AA;  200 MW;  ABCDEF CRC64;
+     CC
+//
+ID   NO_SEQUENCE             Reviewed;          2 AA.
+AC   P00008;
+OX   NCBI_TaxID=9606;
+//
+ID   UNTERMINATED            Reviewed;          2 AA.
+AC   P00009;
+SQ   SEQUENCE   2 AA;  200 MW;  ABCDEF CRC64;
+     DD
