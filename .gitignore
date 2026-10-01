@@ -220,3 +220,6 @@ __marimo__/
 # Esclude tutti i dati pesanti di test
 data/
 TESTING/
+
+# Local Codex/pytest temporary workspaces
+.codex-test-tmp-*/
