@@ -1,0 +1,726 @@
+# Workflow foundation only: scientific stage bodies fail closed in Block 1.
+# Invoke from the project root, or supply paths relative to --directory.
+from pathlib import Path
+
+from probe.workflow.config import PipelineConfig, ROLES
+
+configfile: str(Path(workflow.basedir).parent / "config" / "pipeline.yaml")
+
+cfg = PipelineConfig.from_mapping(config)
+FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1"}
+
+
+def bundle(stage, role=None):
+    """Return the completion manifest tracked by Snakemake for a stage bundle."""
+    root = cfg.data["locations"]["output" if stage in FINAL_STAGES else "work"]
+    return str(
+        Path(root)
+        / (role or "common")
+        / stage
+        / "manifest.json"
+    )
+
+
+def stage_log(stage, role=None):
+    return str(Path(cfg.data["locations"]["logs"]) / (role or "common") / (stage + ".log"))
+
+
+def both(stage):
+    return [bundle(stage, role) for role in ROLES]
+
+
+wildcard_constraints:
+    role="START|END"
+
+rule all:
+    input:
+        bundle("06C1"),
+        bundle("05R_POST")
+
+if cfg.uses_adapter:
+    rule stage_00:
+        input:
+            cfg.target_inputs()
+        output:
+            bundle("00")
+        log:
+            stage_log("00")
+        params:
+            stage="00",
+            scientific=cfg.data["scientific"],
+            ontology=cfg.data["ontology"],
+            release_config=cfg.data["releases"],
+            target_contract=cfg.data["targets"]
+        threads:
+            cfg.resources("00")["threads"]
+        resources:
+            mem_mb=cfg.resources("00")["mem_mb"],
+            runtime=cfg.resources("00")["runtime_minutes"]
+        script:
+            "scripts/unimplemented_stage.py"
+
+rule stage_01:
+    input:
+        ([bundle("00")] if cfg.uses_adapter else cfg.target_inputs())
+    output:
+        bundle("01")
+    log:
+        stage_log("01")
+    params:
+        stage="01",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("01")["threads"]
+    resources:
+        mem_mb=cfg.resources("01")["mem_mb"],
+        runtime=cfg.resources("01")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_01A_FULL:
+    input:
+        lambda w: cfg.release(w.role)["uniprot_sources"]
+    output:
+        bundle("01A_FULL", "{role}")
+    log:
+        stage_log("01A_FULL", "{role}")
+    params:
+        stage="01A_FULL",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("01A_FULL")["threads"]
+    resources:
+        mem_mb=cfg.resources("01A_FULL")["mem_mb"],
+        runtime=cfg.resources("01A_FULL")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_01B0:
+    input:
+        cfg.data["ontology"]["path"]
+    output:
+        bundle("01B0")
+    log:
+        stage_log("01B0")
+    params:
+        stage="01B0",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("01B0")["threads"]
+    resources:
+        mem_mb=cfg.resources("01B0")["mem_mb"],
+        runtime=cfg.resources("01B0")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_01B1:
+    input:
+        lambda w: cfg.release(w.role)["goa"],
+        bundle("01A_FULL", "{role}"),
+        bundle("01B0")
+    output:
+        bundle("01B1", "{role}")
+    log:
+        stage_log("01B1", "{role}")
+    params:
+        stage="01B1",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("01B1")["threads"]
+    resources:
+        mem_mb=cfg.resources("01B1")["mem_mb"],
+        runtime=cfg.resources("01B1")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_01C:
+    input:
+        bundle("01A_FULL", "{role}"),
+        bundle("01B1", "{role}")
+    output:
+        bundle("01C", "{role}")
+    log:
+        stage_log("01C", "{role}")
+    params:
+        stage="01C",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("01C")["threads"]
+    resources:
+        mem_mb=cfg.resources("01C")["mem_mb"],
+        runtime=cfg.resources("01C")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_02A:
+    input:
+        bundle("01C", "{role}")
+    output:
+        bundle("02A", "{role}")
+    log:
+        stage_log("02A", "{role}")
+    params:
+        stage="02A",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("02A")["threads"]
+    resources:
+        mem_mb=cfg.resources("02A")["mem_mb"],
+        runtime=cfg.resources("02A")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_02B:
+    input:
+        lambda w: [value for key, value in cfg.release(w.role)["taxonomy"].items() if key != "snapshot_id"],
+        bundle("01"),
+        bundle("02A", "{role}")
+    output:
+        bundle("02B", "{role}")
+    log:
+        stage_log("02B", "{role}")
+    params:
+        stage="02B",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("02B")["threads"]
+    resources:
+        mem_mb=cfg.resources("02B")["mem_mb"],
+        runtime=cfg.resources("02B")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_03:
+    input:
+        bundle("01"),
+        bundle("01C", "{role}"),
+        bundle("02B", "{role}")
+    output:
+        bundle("03", "{role}")
+    log:
+        stage_log("03", "{role}")
+    params:
+        stage="03",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("03")["threads"]
+    resources:
+        mem_mb=cfg.resources("03")["mem_mb"],
+        runtime=cfg.resources("03")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04A:
+    input:
+        bundle("01"),
+        bundle("01A_FULL", "{role}")
+    output:
+        bundle("04A", "{role}")
+    log:
+        stage_log("04A", "{role}")
+    params:
+        stage="04A",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04A")["threads"]
+    resources:
+        mem_mb=cfg.resources("04A")["mem_mb"],
+        runtime=cfg.resources("04A")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04B:
+    input:
+        bundle("04A", "{role}"),
+        bundle("02B", "{role}")
+    output:
+        bundle("04B", "{role}")
+    log:
+        stage_log("04B", "{role}")
+    params:
+        stage="04B",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04B")["threads"]
+    resources:
+        mem_mb=cfg.resources("04B")["mem_mb"],
+        runtime=cfg.resources("04B")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04C:
+    input:
+        bundle("01"),
+        both("04B")
+    output:
+        bundle("04C")
+    log:
+        stage_log("04C")
+    params:
+        stage="04C",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04C")["threads"]
+    resources:
+        mem_mb=cfg.resources("04C")["mem_mb"],
+        runtime=cfg.resources("04C")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04D0a:
+    input:
+        bundle("01A_FULL", "{role}")
+    output:
+        bundle("04D0a", "{role}")
+    log:
+        stage_log("04D0a", "{role}")
+    params:
+        stage="04D0a",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04D0a")["threads"]
+    resources:
+        mem_mb=cfg.resources("04D0a")["mem_mb"],
+        runtime=cfg.resources("04D0a")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04D0b:
+    input:
+        bundle("04D0a", "{role}"),
+        bundle("02B", "{role}")
+    output:
+        bundle("04D0b", "{role}")
+    log:
+        stage_log("04D0b", "{role}")
+    params:
+        stage="04D0b",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04D0b")["threads"]
+    resources:
+        mem_mb=cfg.resources("04D0b")["mem_mb"],
+        runtime=cfg.resources("04D0b")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04D1:
+    input:
+        bundle("01"),
+        bundle("04C"),
+        both("04B"),
+        both("02B")
+    output:
+        bundle("04D1")
+    log:
+        stage_log("04D1")
+    params:
+        stage="04D1",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04D1")["threads"]
+    resources:
+        mem_mb=cfg.resources("04D1")["mem_mb"],
+        runtime=cfg.resources("04D1")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04D2:
+    input:
+        bundle("04D1"),
+        bundle("04D0b", "{role}"),
+        bundle("01A_FULL", "{role}")
+    output:
+        bundle("04D2", "{role}")
+    log:
+        stage_log("04D2", "{role}")
+    params:
+        stage="04D2",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04D2")["threads"]
+    resources:
+        mem_mb=cfg.resources("04D2")["mem_mb"],
+        runtime=cfg.resources("04D2")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_04E:
+    input:
+        bundle("04D2", "{role}")
+    output:
+        bundle("04E", "{role}")
+    log:
+        stage_log("04E", "{role}")
+    params:
+        stage="04E",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("04E")["threads"]
+    resources:
+        mem_mb=cfg.resources("04E")["mem_mb"],
+        runtime=cfg.resources("04E")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05A:
+    input:
+        both("03"),
+        both("04E")
+    output:
+        bundle("05A")
+    log:
+        stage_log("05A")
+    params:
+        stage="05A",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05A")["threads"]
+    resources:
+        mem_mb=cfg.resources("05A")["mem_mb"],
+        runtime=cfg.resources("05A")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05B:
+    input:
+        bundle("01"),
+        bundle("05A"),
+        both("04B")
+    output:
+        bundle("05B")
+    log:
+        stage_log("05B")
+    params:
+        stage="05B",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05B")["threads"]
+    resources:
+        mem_mb=cfg.resources("05B")["mem_mb"],
+        runtime=cfg.resources("05B")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05R0:
+    input:
+        bundle("05B"),
+        bundle("01"),
+        bundle("02B", "{role}")
+    output:
+        bundle("05R0", "{role}")
+    log:
+        stage_log("05R0", "{role}")
+    params:
+        stage="05R0",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05R0")["threads"]
+    resources:
+        mem_mb=cfg.resources("05R0")["mem_mb"],
+        runtime=cfg.resources("05R0")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05R1:
+    input:
+        bundle("05R0", "{role}"),
+        bundle("04D0b", "{role}"),
+        bundle("01A_FULL", "{role}")
+    output:
+        bundle("05R1", "{role}")
+    log:
+        stage_log("05R1", "{role}")
+    params:
+        stage="05R1",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05R1")["threads"]
+    resources:
+        mem_mb=cfg.resources("05R1")["mem_mb"],
+        runtime=cfg.resources("05R1")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05A2:
+    input:
+        bundle("05A"),
+        both("05R1")
+    output:
+        bundle("05A2")
+    log:
+        stage_log("05A2")
+    params:
+        stage="05A2",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05A2")["threads"]
+    resources:
+        mem_mb=cfg.resources("05A2")["mem_mb"],
+        runtime=cfg.resources("05A2")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05C2:
+    input:
+        bundle("05A2"),
+        both("04B")
+    output:
+        bundle("05C2")
+    log:
+        stage_log("05C2")
+    params:
+        stage="05C2",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05C2")["threads"]
+    resources:
+        mem_mb=cfg.resources("05C2")["mem_mb"],
+        runtime=cfg.resources("05C2")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05R_POST:
+    input:
+        bundle("05B"),
+        both("05R0"),
+        both("05R1"),
+        bundle("05A2"),
+        bundle("05C2"),
+        both("02B"),
+        both("04B")
+    output:
+        bundle("05R_POST")
+    log:
+        stage_log("05R_POST")
+    params:
+        stage="05R_POST",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05R_POST")["threads"]
+    resources:
+        mem_mb=cfg.resources("05R_POST")["mem_mb"],
+        runtime=cfg.resources("05R_POST")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_05D:
+    input:
+        bundle("05A2"),
+        bundle("05C2"),
+        bundle("01A_FULL", "{role}")
+    output:
+        bundle("05D", "{role}")
+    log:
+        stage_log("05D", "{role}")
+    params:
+        stage="05D",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=lambda w: cfg.release(w.role),
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("05D")["threads"]
+    resources:
+        mem_mb=cfg.resources("05D")["mem_mb"],
+        runtime=cfg.resources("05D")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_06A:
+    input:
+        bundle("01"),
+        bundle("05A2"),
+        bundle("05C2"),
+        both("05D")
+    output:
+        bundle("06A")
+    log:
+        stage_log("06A")
+    params:
+        stage="06A",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("06A")["threads"]
+    resources:
+        mem_mb=cfg.resources("06A")["mem_mb"],
+        runtime=cfg.resources("06A")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_NONEXACT:
+    input:
+        bundle("06A")
+    output:
+        bundle("NONEXACT")
+    log:
+        stage_log("NONEXACT")
+    params:
+        stage="NONEXACT",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("NONEXACT")["threads"]
+    resources:
+        mem_mb=cfg.resources("NONEXACT")["mem_mb"],
+        runtime=cfg.resources("NONEXACT")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_06C0:
+    input:
+        bundle("NONEXACT"),
+        bundle("01"),
+        both("05D")
+    output:
+        bundle("06C0")
+    log:
+        stage_log("06C0")
+    params:
+        stage="06C0",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("06C0")["threads"]
+    resources:
+        mem_mb=cfg.resources("06C0")["mem_mb"],
+        runtime=cfg.resources("06C0")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+rule stage_06C1:
+    input:
+        bundle("06A"),
+        bundle("06C0")
+    output:
+        bundle("06C1")
+    log:
+        stage_log("06C1")
+    params:
+        stage="06C1",
+        scientific=cfg.data["scientific"],
+        ontology=cfg.data["ontology"],
+        release_config=cfg.data["releases"],
+        target_contract=cfg.data["targets"]
+    threads:
+        cfg.resources("06C1")["threads"]
+    resources:
+        mem_mb=cfg.resources("06C1")["mem_mb"],
+        runtime=cfg.resources("06C1")["runtime_minutes"]
+    script:
+        "scripts/unimplemented_stage.py"
+
+# Explicit validation only. This never runs merely to decide a normal restart.
+rule validate_artifacts:
+    input:
+        ([bundle("00")] if cfg.uses_adapter else []),
+        [bundle("01")],
+        both("01A_FULL"),
+        [bundle("01B0")],
+        both("01B1"),
+        both("01C"),
+        both("02A"),
+        both("02B"),
+        both("03"),
+        both("04A"),
+        both("04B"),
+        [bundle("04C")],
+        both("04D0a"),
+        both("04D0b"),
+        [bundle("04D1")],
+        both("04D2"),
+        both("04E"),
+        [bundle("05A")],
+        [bundle("05B")],
+        both("05R0"),
+        both("05R1"),
+        [bundle("05A2")],
+        [bundle("05C2")],
+        [bundle("05R_POST")],
+        both("05D"),
+        [bundle("06A")],
+        [bundle("NONEXACT")],
+        [bundle("06C0")],
+        [bundle("06C1")],
+    log:
+        stage_log("validate_artifacts")
+    params:
+        deep=cfg.data["validation"]["deep_checksums"]
+    script:
+        "scripts/validate_bundles.py"

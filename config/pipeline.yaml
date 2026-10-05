@@ -1,0 +1,95 @@
+# Template: replace input paths and release IDs before execution.
+# Relative paths resolve against the Snakemake invocation directory.
+schema_version: 1
+targets:
+  mode: canonical
+  fasta: inputs/targets.fasta
+  metadata: inputs/targets.tsv
+  adapter: null
+  # In adapter mode, replace null with:
+  # name: source-format-name
+  # version: '1'
+  # implementation: adapters/source_adapter.py
+  # inputs: [inputs/raw_targets.txt]
+  # taxid_contract: explicit TaxID from documented source field
+  # id_policy: preserve_source_id_or_deterministic_source_record_id
+releases:
+  START:
+    release_id: release-start
+    uniprot_sources: [inputs/start/swissprot.dat.gz, inputs/start/trembl.dat.gz]
+    goa: inputs/start/goa.gaf
+    taxonomy:
+      snapshot_id: taxonomy-start
+      nodes: inputs/start/taxonomy/nodes.dmp
+      names: inputs/start/taxonomy/names.dmp
+      merged: inputs/start/taxonomy/merged.dmp
+      deleted: inputs/start/taxonomy/delnodes.dmp
+  END:
+    release_id: release-end
+    uniprot_sources: [inputs/end/swissprot.dat.gz, inputs/end/trembl.dat.gz]
+    goa: inputs/end/goa.gaf
+    taxonomy:
+      snapshot_id: taxonomy-end
+      nodes: inputs/end/taxonomy/nodes.dmp
+      names: inputs/end/taxonomy/names.dmp
+      merged: inputs/end/taxonomy/merged.dmp
+      deleted: inputs/end/taxonomy/delnodes.dmp
+ontology:
+  path: inputs/ontology/go.owl
+  sha256: 42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666
+  canonical_url: http://purl.obolibrary.org/obo/go.owl
+  original_url: null
+  retrieval_date: null
+  version_iri: null
+locations:
+  work: work/pipeline-v2
+  output: results/pipeline-v2
+  logs: logs/pipeline-v2
+resources:
+  default: {threads: 1, mem_mb: 2048, runtime_minutes: 60}
+  stages:
+    06C0: {threads: 8, mem_mb: 16384, runtime_minutes: 240}
+validation:
+  deep_checksums: false
+scientific:
+  policy_version: pre-resolver-v2-frozen-v1
+  target_policy: protein-sequence-v1
+  adapter_sequence_policy: literal_no_repair
+  go_policy: probe-goa-normalization-policy-v1
+  closure_relations:
+    - http://www.w3.org/2000/01/rdf-schema#subClassOf
+    - http://purl.obolibrary.org/obo/BFO_0000050
+  sequence:
+    k: 7
+    max_required_shared: 10
+    min_target_kmer_fraction: 0.25
+    exclude_fragments: true
+    species_target_bucket: same_species_anchor
+    subtaxon_target_bucket: same_resolved_taxid
+    primary_universe: GO_POSITIVE_V2
+    rescue_universe: FULL_V2
+    rescue_trigger: BASELINE_UNCOVERED_AND_K7_SEARCHABLE
+    rescue_algorithm: SAME_AS_STAGE_03
+  lineage:
+    sources: [TARGET_ACCESSION, ELIGIBLE_DIRECT_ANCHORS]
+    key_types: [ACCESSION, ORDERED_LOCUS, ORF]
+    recursive: false
+    sequence_candidates_donate_keys: false
+  union:
+    key: [release, target_id, rid]
+    provenance: [GO_POSITIVE_SEQUENCE, FULL_V2_RESCUE_SEQUENCE, LINEAGE]
+  taxonomy_audit:
+    primary: false
+    same_species_wrong_subtaxon_alignment: true
+    cross_species_alignment: false
+  alignment:
+    modes: [TARGET_GLOBAL, CANDIDATE_GLOBAL]
+    algorithm: AFFINE_FULL_DP
+    banding: false
+    match: 2
+    mismatch: -1
+    gap_open: -3
+    gap_extend: -1
+    gap_cost: open_plus_length_minus_one_extensions
+    traceback_policy: reference_06C0
+    exact_pairs: MATHEMATICAL_NO_DP

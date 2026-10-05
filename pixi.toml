@@ -14,10 +14,13 @@ cmake = ">=3.20,<5"
 ninja = ">=1.11,<2"
 cxx-compiler = ">=1.7,<2"
 zlib = ">=1.3,<2"
+# Snakemake 9.27.0 requires packaging <26; avoid a conda/PyPI solve conflict.
+packaging = ">=24,<26"
 
 [pypi-dependencies]
 probe-benchmark = { path = ".", editable = true }
 pytest = "*"
+snakemake = "==9.27.0"
 
 [feature.dev.dependencies]
 pytest = ">=8,<9"

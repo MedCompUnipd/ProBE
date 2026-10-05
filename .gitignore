@@ -223,3 +223,9 @@ TESTING/
 
 # Local Codex/pytest temporary workspaces
 .codex-test-tmp-*/
+
+# Snakemake state and default pre-resolver artifact locations
+.snakemake/
+work/pipeline-v2/
+results/pipeline-v2/
+logs/pipeline-v2/

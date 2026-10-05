@@ -1,0 +1,250 @@
+"""Validate workflow configuration without reading biological inputs."""
+
+from __future__ import annotations
+
+from copy import deepcopy
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+ROLES = ("START", "END")
+PINNED_GO_SHA256 = "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666"
+# Values are the validated policy, not tunable sensitivity controls.
+FROZEN_SCIENTIFIC = {
+    "policy_version": "pre-resolver-v2-frozen-v1",
+    "target_policy": "protein-sequence-v1",
+    "adapter_sequence_policy": "literal_no_repair",
+    "go_policy": "probe-goa-normalization-policy-v1",
+    "closure_relations": [
+        "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+        "http://purl.obolibrary.org/obo/BFO_0000050",
+    ],
+    "sequence": {
+        "k": 7,
+        "max_required_shared": 10,
+        "min_target_kmer_fraction": 0.25,
+        "exclude_fragments": True,
+        "species_target_bucket": "same_species_anchor",
+        "subtaxon_target_bucket": "same_resolved_taxid",
+        "primary_universe": "GO_POSITIVE_V2",
+        "rescue_universe": "FULL_V2",
+        "rescue_trigger": "BASELINE_UNCOVERED_AND_K7_SEARCHABLE",
+        "rescue_algorithm": "SAME_AS_STAGE_03",
+    },
+    "lineage": {
+        "sources": ["TARGET_ACCESSION", "ELIGIBLE_DIRECT_ANCHORS"],
+        "key_types": ["ACCESSION", "ORDERED_LOCUS", "ORF"],
+        "recursive": False,
+        "sequence_candidates_donate_keys": False,
+    },
+    "union": {
+        "key": ["release", "target_id", "rid"],
+        "provenance": ["GO_POSITIVE_SEQUENCE", "FULL_V2_RESCUE_SEQUENCE", "LINEAGE"],
+    },
+    "taxonomy_audit": {
+        "primary": False,
+        "same_species_wrong_subtaxon_alignment": True,
+        "cross_species_alignment": False,
+    },
+    "alignment": {
+        "modes": ["TARGET_GLOBAL", "CANDIDATE_GLOBAL"],
+        "algorithm": "AFFINE_FULL_DP",
+        "banding": False,
+        "match": 2,
+        "mismatch": -1,
+        "gap_open": -3,
+        "gap_extend": -1,
+        "gap_cost": "open_plus_length_minus_one_extensions",
+        "traceback_policy": "reference_06C0",
+        "exact_pairs": "MATHEMATICAL_NO_DP",
+    },
+}
+
+
+def _keys(value: Any, required: set[str], label: str) -> dict:
+    if not isinstance(value, dict) or set(value) != required:
+        raise ValueError(f"{label}: expected keys {sorted(required)}")
+    return value
+
+
+def _text(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label}: expected nonempty string")
+    return value
+
+
+def _paths(value: Any, label: str) -> list[str]:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{label}: expected nonempty path list")
+    return [_text(item, label) for item in value]
+
+
+def _overlap(a: Path, b: Path) -> bool:
+    return a == b or a in b.parents or b in a.parents
+
+
+@dataclass(frozen=True)
+class PipelineConfig:
+    """Validated configuration; no scheduling, state, or restart logic."""
+
+    data: dict[str, Any]
+
+    @classmethod
+    def from_mapping(cls, mapping: dict[str, Any]) -> PipelineConfig:
+        data = deepcopy(mapping)
+        _keys(
+            data,
+            {
+                "schema_version",
+                "targets",
+                "releases",
+                "ontology",
+                "locations",
+                "resources",
+                "validation",
+                "scientific",
+            },
+            "config",
+        )
+        if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+            raise ValueError("unsupported config schema_version")
+        targets = _keys(
+            data["targets"], {"mode", "fasta", "metadata", "adapter"}, "targets"
+        )
+        if targets["mode"] == "canonical":
+            _text(targets["fasta"], "targets.fasta")
+            _text(targets["metadata"], "targets.metadata")
+            if targets["adapter"] is not None:
+                raise ValueError("canonical mode must not specify an adapter")
+        elif targets["mode"] == "adapter":
+            adapter = _keys(
+                targets["adapter"],
+                {
+                    "name",
+                    "version",
+                    "implementation",
+                    "inputs",
+                    "taxid_contract",
+                    "id_policy",
+                },
+                "adapter",
+            )
+            for key in set(adapter) - {"inputs"}:
+                _text(adapter[key], f"adapter.{key}")
+            _paths(adapter["inputs"], "adapter.inputs")
+        else:
+            raise ValueError("targets.mode must be canonical or adapter")
+        releases = _keys(data["releases"], set(ROLES), "releases")
+        for role, release in releases.items():
+            _keys(release, {"release_id", "uniprot_sources", "goa", "taxonomy"}, role)
+            _text(release["release_id"], f"{role}.release_id")
+            _paths(release["uniprot_sources"], f"{role}.uniprot_sources")
+            _text(release["goa"], f"{role}.goa")
+            tax = _keys(
+                release["taxonomy"],
+                {"snapshot_id", "nodes", "names", "merged", "deleted"},
+                f"{role}.taxonomy",
+            )
+            for key, value in tax.items():
+                _text(value, f"{role}.taxonomy.{key}")
+        if releases["START"]["release_id"] == releases["END"]["release_id"]:
+            raise ValueError("START and END release IDs must be distinct")
+        ontology = _keys(
+            data["ontology"],
+            {
+                "path",
+                "sha256",
+                "canonical_url",
+                "original_url",
+                "retrieval_date",
+                "version_iri",
+            },
+            "ontology",
+        )
+        _text(ontology["path"], "ontology.path")
+        if ontology["sha256"] != PINNED_GO_SHA256:
+            raise ValueError("ontology.sha256 must retain the pinned oracle snapshot")
+        if ontology["canonical_url"] != "http://purl.obolibrary.org/obo/go.owl":
+            raise ValueError("ontology.canonical_url must identify official go.owl")
+        for key in ("original_url", "retrieval_date", "version_iri"):
+            if ontology[key] is not None:
+                _text(ontology[key], f"ontology.{key}")
+        # Exact type-sensitive policy equality (True must not substitute for 1).
+        import json
+
+        if json.dumps(data["scientific"], sort_keys=True) != json.dumps(
+            FROZEN_SCIENTIFIC, sort_keys=True
+        ):
+            raise ValueError(
+                "scientific parameters differ from frozen validated policy"
+            )
+        resources = _keys(data["resources"], {"default", "stages"}, "resources")
+        _keys(
+            resources["default"],
+            {"threads", "mem_mb", "runtime_minutes"},
+            "resources.default",
+        )
+        if not isinstance(resources["stages"], dict):
+            raise ValueError("resources.stages must be a mapping")
+        for label, values in [
+            ("default", resources["default"]),
+            *resources["stages"].items(),
+        ]:
+            _keys(
+                values, {"threads", "mem_mb", "runtime_minutes"}, f"resources.{label}"
+            )
+            for value in values.values():
+                if type(value) is not int or value <= 0:
+                    raise ValueError("resource values must be positive integers")
+        validation = _keys(data["validation"], {"deep_checksums"}, "validation")
+        if type(validation["deep_checksums"]) is not bool:
+            raise ValueError("deep_checksums must be boolean")
+        locations = _keys(data["locations"], {"work", "output", "logs"}, "locations")
+        roots = [Path(_text(p, "location")).resolve() for p in locations.values()]
+        repo = Path(__file__).resolve().parents[3]
+        for root in roots:
+            if "TESTING" in root.parts or any(
+                _overlap(root, repo / name)
+                for name in (
+                    "src",
+                    "tests",
+                    "config",
+                    "workflow",
+                    "docs",
+                    ".git",
+                    "reference",
+                )
+            ):
+                raise ValueError(
+                    "output location overlaps protected repository content"
+                )
+        if any(_overlap(a, b) for i, a in enumerate(roots) for b in roots[i + 1 :]):
+            raise ValueError("work/output/log locations must not overlap")
+        parsed = cls(data)
+        inputs = parsed.target_inputs() + [ontology["path"]]
+        for release in releases.values():
+            inputs += release["uniprot_sources"] + [release["goa"]]
+            inputs += [v for k, v in release["taxonomy"].items() if k != "snapshot_id"]
+        if any(_overlap(root, Path(p).resolve()) for root in roots for p in inputs):
+            raise ValueError("output locations must not overlap input paths")
+        return parsed
+
+    @property
+    def uses_adapter(self) -> bool:
+        return self.data["targets"]["mode"] == "adapter"
+
+    def target_inputs(self) -> list[str]:
+        targets = self.data["targets"]
+        if self.uses_adapter:
+            adapter = targets["adapter"]
+            return [*adapter["inputs"], adapter["implementation"]]
+        return [targets["fasta"], targets["metadata"]]
+
+    def release(self, role: str) -> dict[str, Any]:
+        if role not in ROLES:
+            raise ValueError(f"unknown release role: {role}")
+        return self.data["releases"][role]
+
+    def resources(self, stage: str) -> dict[str, int]:
+        resources = self.data["resources"]
+        return dict(resources["stages"].get(stage, resources["default"]))
