@@ -98,10 +98,8 @@ rule stage_01:
         stage_log("01")
     params:
         stage="01",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        target_mode=cfg.data["targets"]["mode"],
+        target_policy=cfg.data["scientific"]["target_policy"]
     threads:
         cfg.resources("01")["threads"]
     resources:
@@ -120,10 +118,7 @@ rule stage_01A_FULL:
         stage_log("01A_FULL", "{role}")
     params:
         stage="01A_FULL",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        release_id=lambda w: cfg.release(w.role)["release_id"]
     threads:
         cfg.resources("01A_FULL")["threads"]
     resources:
@@ -141,10 +136,8 @@ rule stage_01B0:
         stage_log("01B0")
     params:
         stage="01B0",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        go_policy=cfg.data["scientific"]["go_policy"],
+        ontology=cfg.data["ontology"]
     threads:
         cfg.resources("01B0")["threads"]
     resources:

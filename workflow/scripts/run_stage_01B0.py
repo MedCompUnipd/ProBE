@@ -15,6 +15,7 @@ context = globals()["snakemake"]
 owl = Path(context.input.owl)
 destination = Path(context.output[0]).parent
 ontology_config = dict(context.params.ontology)
+go_policy = str(context.params.go_policy)
 
 owl_artifact = input_artifact(owl)
 expected_sha256 = ontology_config["expected_sha256"]
@@ -31,7 +32,7 @@ if expected_sha256 is not None:
     command.extend(["--expected-owl-sha256", expected_sha256])
 
 parameters = {
-    "go_policy": context.params.scientific["go_policy"],
+    "go_policy": go_policy,
     "expected_owl_sha256": expected_sha256,
     "command": command,
 }
@@ -63,6 +64,7 @@ with log_path.open("w", encoding="utf-8") as log:
             implementation=implementation,
             inputs=(owl_artifact,),
             environment=runtime_environment(),
+            allow_invalidated_destination=True,
         ) as staging:
             result = compile_go_policy(
                 owl_path=owl,

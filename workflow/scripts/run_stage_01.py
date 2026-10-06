@@ -11,7 +11,10 @@ from probe.workflow.runtime import input_artifact, runtime_environment
 
 context = globals()["snakemake"]
 
-if context.params.target_contract["mode"] != "canonical":
+target_mode = str(context.params.target_mode)
+target_policy = str(context.params.target_policy)
+
+if target_mode != "canonical":
     raise RuntimeError(
         "Stage 01 adapter handoff is not implemented yet; "
         "Stage 00 must first provide canonical target inputs"
@@ -38,8 +41,8 @@ command = [
 inputs = tuple(input_artifact(path) for path in sources)
 
 parameters = {
-    "scientific": dict(context.params.scientific),
-    "target_contract": dict(context.params.target_contract),
+    "target_mode": target_mode,
+    "target_policy": target_policy,
     "command": command,
 }
 
@@ -64,6 +67,7 @@ with log_path.open("w", encoding="utf-8") as log:
             implementation=implementation,
             inputs=inputs,
             environment=runtime_environment(),
+            allow_invalidated_destination=True,
         ) as staging:
             result = prepare_targets(
                 target_fasta=target_fasta,

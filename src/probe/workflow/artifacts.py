@@ -247,14 +247,14 @@ def atomic_stage_bundle(
     inputs: tuple[Artifact, ...] = (),
     environment: Mapping[str, Any] | None = None,
     hash_outputs: bool = True,
+    allow_invalidated_destination: bool = False,
 ) -> Iterator[Path]:
     """Publish a new immutable bundle by one same-filesystem directory rename.
 
     A sibling lock prevents concurrent publishers. An existing empty directory is
-    treated as an orchestration-created placeholder and removed under the lock;
-    an existing bundle or any nonempty destination is never replaced. After
-    process death, an operator must verify no writer survives before clearing its
-    orphan lock/temp directory. This is publication protection, not job state.
+    treated as an orchestration-created placeholder. A nonempty destination whose
+    manifest has been removed by the workflow may be cleared explicitly before
+    recomputation; a complete published bundle is never overwritten.
     """
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -265,9 +265,17 @@ def atomic_stage_bundle(
         if destination.is_symlink():
             raise FileExistsError(destination)
         if destination.exists():
-            if not destination.is_dir() or any(destination.iterdir()):
+            if not destination.is_dir():
                 raise FileExistsError(destination)
-            destination.rmdir()
+
+            if any(destination.iterdir()):
+                if not allow_invalidated_destination:
+                    raise FileExistsError(destination)
+                if (destination / MANIFEST_NAME).exists():
+                    raise FileExistsError(destination)
+                shutil.rmtree(destination)
+            else:
+                destination.rmdir()
 
         staging = Path(
             tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)

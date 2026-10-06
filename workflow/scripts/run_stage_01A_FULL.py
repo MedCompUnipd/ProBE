@@ -10,7 +10,7 @@ from probe.workflow.runtime import input_artifact, runtime_environment
 context = globals()["snakemake"]
 
 role = str(context.wildcards.role)
-release = dict(context.params.release_config)
+release_id = str(context.params.release_id)
 
 sources = [Path(path) for path in context.input.sources]
 binary = Path(context.input.binary)
@@ -30,14 +30,14 @@ command.extend(
         "--output-prefix",
         "<stage-bundle>/01A_full_v2",
         "--release-id",
-        release["release_id"],
+        release_id,
         "--progress-every",
         str(progress_every),
     ]
 )
 
 parameters = {
-    "release_id": release["release_id"],
+    "release_id": release_id,
     "source_order": [str(path.resolve()) for path in sources],
     "progress_every": progress_every,
     "command": command,
@@ -59,12 +59,13 @@ with log_path.open("w", encoding="utf-8") as log:
             destination,
             stage="01A_FULL",
             role=role,
-            release_id=release["release_id"],
+            release_id=release_id,
             parameters=parameters,
             ontology=None,
             implementation=implementation,
             inputs=(*source_artifacts, binary_artifact),
             environment=runtime_environment(),
+            allow_invalidated_destination=True,
         ) as staging:
             actual_command = [str(binary)]
             for source in sources:
@@ -74,7 +75,7 @@ with log_path.open("w", encoding="utf-8") as log:
                     "--output-prefix",
                     str(staging / output_prefix_name),
                     "--release-id",
-                    release["release_id"],
+                    release_id,
                     "--progress-every",
                     str(progress_every),
                 ]

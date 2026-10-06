@@ -221,3 +221,58 @@ def test_empty_precreated_destination_can_be_published_atomically(
     assert (destination / "facts.tsv").read_text(
         encoding="utf-8"
     ) == "complete\n"
+
+
+
+
+def test_invalidated_bundle_can_be_recomputed(tmp_path, metadata):
+    destination = tmp_path / "bundle"
+
+    with atomic_stage_bundle(destination, **metadata) as staging:
+        (staging / "facts.tsv").write_text("old\n", encoding="utf-8")
+
+    # Snakemake invalidates the declared completion marker before rerunning.
+    (destination / artifacts.MANIFEST_NAME).unlink()
+
+    try:
+        with atomic_stage_bundle(
+            destination,
+            allow_invalidated_destination=True,
+            **metadata,
+        ) as staging:
+            assert not destination.exists()
+            (staging / "facts.tsv").write_text(
+                "failed-new\n",
+                encoding="utf-8",
+            )
+            raise RuntimeError("synthetic failure")
+    except RuntimeError:
+        pass
+
+    assert not destination.exists()
+
+    with atomic_stage_bundle(
+        destination,
+        allow_invalidated_destination=True,
+        **metadata,
+    ) as staging:
+        (staging / "facts.tsv").write_text("new\n", encoding="utf-8")
+
+    artifacts.validate_bundle(destination, deep=True)
+    assert (destination / "facts.tsv").read_text(
+        encoding="utf-8"
+    ) == "new\n"
+
+
+def test_complete_bundle_is_never_overwritten(tmp_path, metadata):
+    destination = tmp_path / "bundle"
+
+    with atomic_stage_bundle(destination, **metadata) as staging:
+        (staging / "facts.tsv").write_text("old\n", encoding="utf-8")
+
+    with pytest.raises(FileExistsError), atomic_stage_bundle(
+        destination,
+        allow_invalidated_destination=True,
+        **metadata,
+    ):
+        pass
