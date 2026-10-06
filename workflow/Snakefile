@@ -34,6 +34,14 @@ GO_POSITIVE_FILTER_BINARY = str(
     / "probe-go-positive-filter-v1"
 )
 
+RAW_OX_EXTRACT_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-raw-ox-extract"
+    / "probe-raw-ox-extract-v1"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -53,6 +61,11 @@ GOA_NORMALIZE_BUILD_INPUTS = [
 GO_POSITIVE_FILTER_BUILD_INPUTS = [
     *NATIVE_BUILD_SHARED_INPUTS,
     str(PROJECT_ROOT / "cpp" / "src" / "probe_go_positive_filter_v1.cpp"),
+]
+
+RAW_OX_EXTRACT_BUILD_INPUTS = [
+    *NATIVE_BUILD_SHARED_INPUTS,
+    str(PROJECT_ROOT / "cpp" / "src" / "probe_raw_ox_extract_v1.cpp"),
 ]
 
 
@@ -141,6 +154,19 @@ rule build_go_positive_filter:
         project_root=str(PROJECT_ROOT)
     shell:
         "cd {params.project_root:q} && pixi run build-go-positive-filter > {log:q} 2>&1"
+
+
+rule build_raw_ox_extract:
+    input:
+        RAW_OX_EXTRACT_BUILD_INPUTS
+    output:
+        RAW_OX_EXTRACT_BINARY
+    log:
+        stage_log("build-raw-ox-extract")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && pixi run build-raw-ox-extract > {log:q} 2>&1"
 
 
 rule stage_01:
@@ -243,24 +269,22 @@ rule stage_01C:
 
 rule stage_02A:
     input:
-        bundle("01C", "{role}")
+        source_manifest=bundle("01C", "{role}"),
+        binary=RAW_OX_EXTRACT_BINARY
     output:
         bundle("02A", "{role}")
     log:
         stage_log("02A", "{role}")
     params:
-        stage="02A",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="02A"
     threads:
         cfg.resources("02A")["threads"]
     resources:
         mem_mb=cfg.resources("02A")["mem_mb"],
         runtime=cfg.resources("02A")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_02A.py"
+
 
 rule stage_02B:
     input:

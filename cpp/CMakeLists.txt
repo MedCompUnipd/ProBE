@@ -26,3 +26,8 @@ add_executable(
     probe-go-positive-filter-v1
     src/probe_go_positive_filter_v1.cpp
 )
+
+add_executable(
+    probe-raw-ox-extract-v1
+    src/probe_raw_ox_extract_v1.cpp
+)

@@ -38,3 +38,5 @@ build-goa-normalize = "cmake -S cpp -B .pixi/build/probe-goa-normalize -G Ninja 
 goa-normalize-v1 = ".pixi/build/probe-goa-normalize/probe-goa-normalize-v1"
 build-go-positive-filter = "cmake -S cpp -B .pixi/build/probe-go-positive-filter -G Ninja && cmake --build .pixi/build/probe-go-positive-filter --target probe-go-positive-filter-v1"
 go-positive-filter-v1 = ".pixi/build/probe-go-positive-filter/probe-go-positive-filter-v1"
+build-raw-ox-extract = "cmake -S cpp -B .pixi/build/probe-raw-ox-extract -G Ninja && cmake --build .pixi/build/probe-raw-ox-extract --target probe-raw-ox-extract-v1"
+raw-ox-extract-v1 = ".pixi/build/probe-raw-ox-extract/probe-raw-ox-extract-v1"
