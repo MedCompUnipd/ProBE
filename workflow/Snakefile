@@ -17,14 +17,29 @@ RELEASE_FASTA_BINARY = str(
     / "probe-release-fasta"
     / "probe-release-fasta-v2"
 )
-RELEASE_FASTA_BUILD_INPUTS = [
+
+GOA_NORMALIZE_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-goa-normalize"
+    / "probe-goa-normalize-v1"
+)
+
+NATIVE_BUILD_SHARED_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
     str(PROJECT_ROOT / "pixi.lock"),
-    *[
-        str(path)
-        for path in sorted((PROJECT_ROOT / "cpp").rglob("*"))
-        if path.is_file()
-    ],
+]
+
+RELEASE_FASTA_BUILD_INPUTS = [
+    *NATIVE_BUILD_SHARED_INPUTS,
+    str(PROJECT_ROOT / "cpp" / "src" / "probe_release_fasta_v2.cpp"),
+]
+
+GOA_NORMALIZE_BUILD_INPUTS = [
+    *NATIVE_BUILD_SHARED_INPUTS,
+    str(PROJECT_ROOT / "cpp" / "src" / "probe_goa_normalize_v1.cpp"),
 ]
 
 
@@ -89,6 +104,19 @@ rule build_release_fasta:
     shell:
         "cd {params.project_root:q} && pixi run build-release-fasta > {log:q} 2>&1"
 
+rule build_goa_normalize:
+    input:
+        GOA_NORMALIZE_BUILD_INPUTS
+    output:
+        GOA_NORMALIZE_BINARY
+    log:
+        stage_log("build-goa-normalize")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && pixi run build-goa-normalize > {log:q} 2>&1"
+
+
 rule stage_01:
     input:
         sources=([bundle("00")] if cfg.uses_adapter else cfg.target_inputs())
@@ -148,26 +176,24 @@ rule stage_01B0:
 
 rule stage_01B1:
     input:
-        lambda w: cfg.release(w.role)["goa"],
-        bundle("01A_FULL", "{role}"),
-        bundle("01B0")
+        goa=lambda w: cfg.release(w.role)["goa"],
+        release_manifest=bundle("01A_FULL", "{role}"),
+        policy_manifest=bundle("01B0"),
+        binary=GOA_NORMALIZE_BINARY
     output:
         bundle("01B1", "{role}")
     log:
         stage_log("01B1", "{role}")
     params:
-        stage="01B1",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="01B1"
     threads:
         cfg.resources("01B1")["threads"]
     resources:
         mem_mb=cfg.resources("01B1")["mem_mb"],
         runtime=cfg.resources("01B1")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_01B1.py"
+
 
 rule stage_01C:
     input:

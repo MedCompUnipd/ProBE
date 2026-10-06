@@ -34,5 +34,5 @@ format = "ruff format ."
 check = { depends-on = ["lint", "test"] }
 build-release-fasta = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja && cmake --build .pixi/build/probe-release-fasta --target probe-release-fasta-v2"
 release-fasta-v2 = ".pixi/build/probe-release-fasta/probe-release-fasta-v2"
-build-goa-normalize = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja && cmake --build .pixi/build/probe-release-fasta --target probe-goa-normalize-v1"
-goa-normalize-v1 = ".pixi/build/probe-release-fasta/probe-goa-normalize-v1"
+build-goa-normalize = "cmake -S cpp -B .pixi/build/probe-goa-normalize -G Ninja && cmake --build .pixi/build/probe-goa-normalize --target probe-goa-normalize-v1"
+goa-normalize-v1 = ".pixi/build/probe-goa-normalize/probe-goa-normalize-v1"

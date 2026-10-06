@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD_DIR = ROOT / ".pixi/build/probe-release-fasta"
+BUILD_DIR = ROOT / ".pixi/build/probe-goa-normalize"
 BINARY_NAME = (
     "probe-goa-normalize-v1.exe"
     if os.name == "nt"
