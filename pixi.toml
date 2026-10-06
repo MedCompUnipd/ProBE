@@ -9,7 +9,6 @@ platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
 [dependencies]
 python = ">=3.11,<3.14"
 rdflib = ">=7,<8"
-pytest = ">=8.4.2,<9"
 cmake = ">=3.20,<5"
 ninja = ">=1.11,<2"
 cxx-compiler = ">=1.7,<2"
@@ -19,11 +18,10 @@ packaging = ">=24,<26"
 
 [pypi-dependencies]
 probe-benchmark = { path = ".", editable = true }
-pytest = "*"
 snakemake = "==9.27.0"
 
 [feature.dev.dependencies]
-pytest = ">=8,<9"
+pytest = ">=8.4.2,<9"
 ruff = ">=0.11,<1"
 
 [environments]
@@ -34,5 +32,7 @@ test = "pytest"
 lint = "ruff check ."
 format = "ruff format ."
 check = { depends-on = ["lint", "test"] }
-build-release-fasta = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja && cmake --build .pixi/build/probe-release-fasta"
+build-release-fasta = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja && cmake --build .pixi/build/probe-release-fasta --target probe-release-fasta-v2"
 release-fasta-v2 = ".pixi/build/probe-release-fasta/probe-release-fasta-v2"
+build-goa-normalize = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja && cmake --build .pixi/build/probe-release-fasta --target probe-goa-normalize-v1"
+goa-normalize-v1 = ".pixi/build/probe-release-fasta/probe-goa-normalize-v1"
