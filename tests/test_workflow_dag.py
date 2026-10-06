@@ -149,3 +149,23 @@ def test_final_taxonomy_audit_replaces_baseline_05c(tmp_path):
 
     assert "stage_05C2" in labels
     assert "stage_05C" not in labels
+
+
+def test_stage03_declares_only_its_consumed_parameters():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_03:")
+    end = text.index("\nrule stage_04A:", start)
+    block = text[start:end]
+
+    assert "candidate_policy=cfg.stage03_parameters()" in block
+    assert 'cfg.data["scientific"]' not in block
+    assert '"scripts/run_stage_03.py"' in block
+    assert "binary=PRIMARY_CANDIDATE_SCAN_BINARY" in block
+
+
+def test_stage03_native_build_rule_is_declared():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    assert "rule build_primary_candidate_scan:" in text
+    assert "pixi run build-primary-candidate-scan" in text

@@ -40,3 +40,5 @@ build-go-positive-filter = "cmake -S cpp -B .pixi/build/probe-go-positive-filter
 go-positive-filter-v1 = ".pixi/build/probe-go-positive-filter/probe-go-positive-filter-v1"
 build-raw-ox-extract = "cmake -S cpp -B .pixi/build/probe-raw-ox-extract -G Ninja && cmake --build .pixi/build/probe-raw-ox-extract --target probe-raw-ox-extract-v1"
 raw-ox-extract-v1 = ".pixi/build/probe-raw-ox-extract/probe-raw-ox-extract-v1"
+build-primary-candidate-scan = "cmake -S cpp -B .pixi/build/probe-primary-candidate-scan -G Ninja && cmake --build .pixi/build/probe-primary-candidate-scan --target probe-primary-candidate-scan-v1"
+primary-candidate-scan-v1 = ".pixi/build/probe-primary-candidate-scan/probe-primary-candidate-scan-v1"

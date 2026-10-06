@@ -60,15 +60,14 @@ scientific:
     - http://www.w3.org/2000/01/rdf-schema#subClassOf
     - http://purl.obolibrary.org/obo/BFO_0000050
   sequence:
-    k: 7
-    max_required_shared: 10
-    min_target_kmer_fraction: 0.25
-    exclude_fragments: true
-    species_target_bucket: same_species_anchor
-    subtaxon_target_bucket: same_resolved_taxid
+    k: 7  # integer 4..8
+    max_required_shared: 10  # integer 1..65535
+    min_target_kmer_fraction: 0.25  # float 0.20..1.00
+    fragment_policy: exclude  # exclude | include
+    taxonomy_policy: rank_aware  # rank_aware | strict_taxon
     primary_universe: GO_POSITIVE_V2
     rescue_universe: FULL_V2
-    rescue_trigger: BASELINE_UNCOVERED_AND_K7_SEARCHABLE
+    rescue_trigger: BASELINE_UNCOVERED_AND_K_SEARCHABLE
     rescue_algorithm: SAME_AS_STAGE_03
   lineage:
     sources: [TARGET_ACCESSION, ELIGIBLE_DIRECT_ANCHORS]

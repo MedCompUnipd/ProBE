@@ -10,6 +10,25 @@ cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1"}
 
 PROJECT_ROOT = Path(workflow.basedir).parent.resolve()
+
+PRIMARY_CANDIDATE_SCAN_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-primary-candidate-scan"
+    / "probe-primary-candidate-scan-v1"
+)
+PRIMARY_CANDIDATE_SCAN_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
+    str(
+        PROJECT_ROOT
+        / "cpp"
+        / "src"
+        / "probe_primary_candidate_scan_v1.cpp"
+    ),
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+]
 RELEASE_FASTA_BINARY = str(
     PROJECT_ROOT
     / ".pixi"
@@ -326,28 +345,40 @@ rule stage_02B:
         "scripts/run_stage_02B.py"
 
 
+rule build_primary_candidate_scan:
+    input:
+        PRIMARY_CANDIDATE_SCAN_BUILD_INPUTS
+    output:
+        PRIMARY_CANDIDATE_SCAN_BINARY
+    log:
+        stage_log("build-primary-candidate-scan")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && "
+        "pixi run build-primary-candidate-scan > {log:q} 2>&1"
+
+
 rule stage_03:
     input:
-        bundle("01"),
-        bundle("01C", "{role}"),
-        bundle("02B", "{role}")
+        target_manifest=bundle("01"),
+        go_positive_manifest=bundle("01C", "{role}"),
+        taxonomy_manifest=bundle("02B", "{role}"),
+        binary=PRIMARY_CANDIDATE_SCAN_BINARY
     output:
         bundle("03", "{role}")
     log:
         stage_log("03", "{role}")
     params:
         stage="03",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        candidate_policy=cfg.stage03_parameters()
     threads:
         cfg.resources("03")["threads"]
     resources:
         mem_mb=cfg.resources("03")["mem_mb"],
         runtime=cfg.resources("03")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_03.py"
 
 rule stage_04A:
     input:

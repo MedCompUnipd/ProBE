@@ -58,14 +58,14 @@ def test_invalid_config(config, section, key, value):
         PipelineConfig.from_mapping(config)
 
 
-def test_reject_duplicate_release_ids_unknown_keys_and_policy_changes(config):
+def test_reject_duplicate_release_ids_unknown_keys_and_frozen_policy_changes(config):
     bad = deepcopy(config)
     bad["releases"]["END"]["release_id"] = bad["releases"]["START"]["release_id"]
     with pytest.raises(ValueError, match="distinct"):
         PipelineConfig.from_mapping(bad)
     bad = deepcopy(config)
-    bad["scientific"]["sequence"]["min_target_kmer_fraction"] = 0.10
-    with pytest.raises(ValueError, match="frozen"):
+    bad["scientific"]["sequence"]["primary_universe"] = "FULL_V2"
+    with pytest.raises(ValueError, match="non-tunable"):
         PipelineConfig.from_mapping(bad)
     bad = deepcopy(config)
     bad["resources"]["default"]["threads"] = 0
@@ -106,3 +106,81 @@ def test_ontology_snapshot_is_user_configurable(config):
         parsed.data["ontology"]["canonical_url"]
         == "https://example.org/custom-go.owl"
     )
+
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("k", 4),
+        ("k", 8),
+        ("max_required_shared", 1),
+        ("max_required_shared", 65535),
+        ("min_target_kmer_fraction", 0.20),
+        ("min_target_kmer_fraction", 1.00),
+        ("fragment_policy", "include"),
+        ("taxonomy_policy", "strict_taxon"),
+    ],
+)
+def test_stage03_scientific_parameters_are_configurable(
+    config,
+    key,
+    value,
+):
+    config["scientific"]["sequence"][key] = value
+
+    parsed = PipelineConfig.from_mapping(config)
+
+    assert parsed.stage03_parameters()[key] == value
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("k", 3),
+        ("k", 9),
+        ("k", 4.0),
+        ("k", True),
+        ("max_required_shared", 0),
+        ("max_required_shared", 65536),
+        ("max_required_shared", 10.0),
+        ("min_target_kmer_fraction", 0.19),
+        ("min_target_kmer_fraction", 1.01),
+        ("min_target_kmer_fraction", 1),
+        ("min_target_kmer_fraction", True),
+        ("min_target_kmer_fraction", float("nan")),
+        ("fragment_policy", "sometimes"),
+        ("fragment_policy", True),
+        ("taxonomy_policy", "permissive"),
+        ("taxonomy_policy", True),
+    ],
+)
+def test_stage03_scientific_parameter_validation(
+    config,
+    key,
+    value,
+):
+    config["scientific"]["sequence"][key] = value
+
+    with pytest.raises(ValueError):
+        PipelineConfig.from_mapping(config)
+
+
+def test_stage03_parameter_projection_contains_only_consumed_values(config):
+    parsed = PipelineConfig.from_mapping(config)
+
+    assert parsed.stage03_parameters() == {
+        "k": 7,
+        "max_required_shared": 10,
+        "min_target_kmer_fraction": 0.25,
+        "fragment_policy": "exclude",
+        "taxonomy_policy": "rank_aware",
+    }
+
+
+def test_legacy_stage03_policy_keys_are_rejected(config):
+    sequence = config["scientific"]["sequence"]
+    sequence["exclude_fragments"] = True
+
+    with pytest.raises(ValueError, match="scientific.sequence"):
+        PipelineConfig.from_mapping(config)

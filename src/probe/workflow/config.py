@@ -8,7 +8,17 @@ from pathlib import Path
 from typing import Any
 
 ROLES = ("START", "END")
-# Values are the validated policy, not tunable sensitivity controls.
+
+STAGE03_PARAMETER_KEYS = (
+    "k",
+    "max_required_shared",
+    "min_target_kmer_fraction",
+    "fragment_policy",
+    "taxonomy_policy",
+)
+
+# Reference validated policy. Stage03 parameters listed above are tunable;
+# every other scientific field remains frozen.
 FROZEN_SCIENTIFIC = {
     "policy_version": "pre-resolver-v2-frozen-v1",
     "target_policy": "protein-sequence-v1",
@@ -22,12 +32,11 @@ FROZEN_SCIENTIFIC = {
         "k": 7,
         "max_required_shared": 10,
         "min_target_kmer_fraction": 0.25,
-        "exclude_fragments": True,
-        "species_target_bucket": "same_species_anchor",
-        "subtaxon_target_bucket": "same_resolved_taxid",
+        "fragment_policy": "exclude",
+        "taxonomy_policy": "rank_aware",
         "primary_universe": "GO_POSITIVE_V2",
         "rescue_universe": "FULL_V2",
-        "rescue_trigger": "BASELINE_UNCOVERED_AND_K7_SEARCHABLE",
+        "rescue_trigger": "BASELINE_UNCOVERED_AND_K_SEARCHABLE",
         "rescue_algorithm": "SAME_AS_STAGE_03",
     },
     "lineage": {
@@ -76,6 +85,53 @@ def _paths(value: Any, label: str) -> list[str]:
     if not isinstance(value, list) or not value:
         raise ValueError(f"{label}: expected nonempty path list")
     return [_text(item, label) for item in value]
+
+
+def _int_range(
+    value: Any,
+    label: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if (
+        type(value) is not int
+        or value < minimum
+        or value > maximum
+    ):
+        raise ValueError(
+            f"{label}: expected integer in range "
+            f"{minimum}..{maximum}"
+        )
+    return value
+
+
+def _float_range(
+    value: Any,
+    label: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    if (
+        type(value) is not float
+        or not minimum <= value <= maximum
+    ):
+        raise ValueError(
+            f"{label}: expected floating-point value in range "
+            f"{minimum:.2f}..{maximum:.2f}"
+        )
+    return value
+
+
+def _choice(
+    value: Any,
+    label: str,
+    allowed: set[str],
+) -> str:
+    if type(value) is not str or value not in allowed:
+        raise ValueError(
+            f"{label}: expected one of {sorted(allowed)}"
+        )
+    return value
 
 
 def _overlap(a: Path, b: Path) -> bool:
@@ -181,14 +237,61 @@ class PipelineConfig:
         ):
             if ontology[key] is not None:
                 _text(ontology[key], f"ontology.{key}")
-        # Exact type-sensitive policy equality (True must not substitute for 1).
         import json
 
-        if json.dumps(data["scientific"], sort_keys=True) != json.dumps(
-            FROZEN_SCIENTIFIC, sort_keys=True
+        scientific = _keys(
+            data["scientific"],
+            set(FROZEN_SCIENTIFIC),
+            "scientific",
+        )
+        sequence = _keys(
+            scientific["sequence"],
+            set(FROZEN_SCIENTIFIC["sequence"]),
+            "scientific.sequence",
+        )
+
+        _int_range(
+            sequence["k"],
+            "scientific.sequence.k",
+            4,
+            8,
+        )
+        _int_range(
+            sequence["max_required_shared"],
+            "scientific.sequence.max_required_shared",
+            1,
+            65535,
+        )
+        _float_range(
+            sequence["min_target_kmer_fraction"],
+            "scientific.sequence.min_target_kmer_fraction",
+            0.20,
+            1.00,
+        )
+        _choice(
+            sequence["fragment_policy"],
+            "scientific.sequence.fragment_policy",
+            {"exclude", "include"},
+        )
+        _choice(
+            sequence["taxonomy_policy"],
+            "scientific.sequence.taxonomy_policy",
+            {"rank_aware", "strict_taxon"},
+        )
+
+        frozen_view = deepcopy(scientific)
+        for key in STAGE03_PARAMETER_KEYS:
+            frozen_view["sequence"][key] = (
+                FROZEN_SCIENTIFIC["sequence"][key]
+            )
+
+        if json.dumps(frozen_view, sort_keys=True) != json.dumps(
+            FROZEN_SCIENTIFIC,
+            sort_keys=True,
         ):
             raise ValueError(
-                "scientific parameters differ from frozen validated policy"
+                "non-tunable scientific parameters differ from "
+                "frozen validated policy"
             )
         resources = _keys(data["resources"], {"default", "stages"}, "resources")
         _keys(
@@ -256,6 +359,13 @@ class PipelineConfig:
         if role not in ROLES:
             raise ValueError(f"unknown release role: {role}")
         return self.data["releases"][role]
+
+    def stage03_parameters(self) -> dict[str, Any]:
+        sequence = self.data["scientific"]["sequence"]
+        return {
+            key: sequence[key]
+            for key in STAGE03_PARAMETER_KEYS
+        }
 
     def resources(self, stage: str) -> dict[str, int]:
         resources = self.data["resources"]
