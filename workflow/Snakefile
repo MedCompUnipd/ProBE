@@ -42,6 +42,20 @@ RAW_OX_EXTRACT_BINARY = str(
     / "probe-raw-ox-extract-v1"
 )
 
+TAXONOMY_CONTEXT_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "02_prepare_taxonomy_contexts.py"
+)
+
+TAXONOMY_MODULE = str(
+    PROJECT_ROOT
+    / "src"
+    / "probe"
+    / "taxonomy.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -288,26 +302,29 @@ rule stage_02A:
 
 rule stage_02B:
     input:
-        lambda w: [value for key, value in cfg.release(w.role)["taxonomy"].items() if key != "snapshot_id"],
-        bundle("01"),
-        bundle("02A", "{role}")
+        target_manifest=bundle("01"),
+        ox_manifest=bundle("02A", "{role}"),
+        nodes=lambda w: cfg.release(w.role)["taxonomy"]["nodes"],
+        names=lambda w: cfg.release(w.role)["taxonomy"]["names"],
+        merged=lambda w: cfg.release(w.role)["taxonomy"]["merged"],
+        delnodes=lambda w: cfg.release(w.role)["taxonomy"]["deleted"],
+        implementation_script=TAXONOMY_CONTEXT_SCRIPT,
+        taxonomy_module=TAXONOMY_MODULE
     output:
         bundle("02B", "{role}")
     log:
         stage_log("02B", "{role}")
     params:
         stage="02B",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        snapshot_id=lambda w: cfg.release(w.role)["taxonomy"]["snapshot_id"]
     threads:
         cfg.resources("02B")["threads"]
     resources:
         mem_mb=cfg.resources("02B")["mem_mb"],
         runtime=cfg.resources("02B")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_02B.py"
+
 
 rule stage_03:
     input:
