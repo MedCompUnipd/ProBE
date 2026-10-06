@@ -46,7 +46,7 @@ def test_adapter_selection_requires_explicit_contract(config):
     ("section", "key", "value"),
     [
         ("targets", "mode", "cafa"),
-        ("ontology", "sha256", "bad"),
+        ("ontology", "expected_sha256", "bad"),
         ("validation", "deep_checksums", "false"),
         ("locations", "work", "TESTING/output"),
         ("locations", "output", "src/probe"),
@@ -83,3 +83,26 @@ def test_locations_must_not_overlap_inputs_or_each_other(config):
     config["locations"]["work"] = config["locations"]["output"]
     with pytest.raises(ValueError, match="overlap"):
         PipelineConfig.from_mapping(config)
+
+
+
+def test_ontology_snapshot_is_user_configurable(config):
+    assert config["ontology"]["expected_sha256"] is None
+
+    parsed = PipelineConfig.from_mapping(config)
+    assert parsed.data["ontology"]["expected_sha256"] is None
+
+    user_selected_sha256 = "a" * 64
+    config["ontology"]["expected_sha256"] = user_selected_sha256
+    config["ontology"]["canonical_url"] = "https://example.org/custom-go.owl"
+
+    parsed = PipelineConfig.from_mapping(config)
+
+    assert (
+        parsed.data["ontology"]["expected_sha256"]
+        == user_selected_sha256
+    )
+    assert (
+        parsed.data["ontology"]["canonical_url"]
+        == "https://example.org/custom-go.owl"
+    )

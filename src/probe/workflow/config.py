@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 ROLES = ("START", "END")
-PINNED_GO_SHA256 = "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666"
 # Values are the validated policy, not tunable sensitivity controls.
 FROZEN_SCIENTIFIC = {
     "policy_version": "pre-resolver-v2-frozen-v1",
@@ -153,7 +152,7 @@ class PipelineConfig:
             data["ontology"],
             {
                 "path",
-                "sha256",
+                "expected_sha256",
                 "canonical_url",
                 "original_url",
                 "retrieval_date",
@@ -162,11 +161,24 @@ class PipelineConfig:
             "ontology",
         )
         _text(ontology["path"], "ontology.path")
-        if ontology["sha256"] != PINNED_GO_SHA256:
-            raise ValueError("ontology.sha256 must retain the pinned oracle snapshot")
-        if ontology["canonical_url"] != "http://purl.obolibrary.org/obo/go.owl":
-            raise ValueError("ontology.canonical_url must identify official go.owl")
-        for key in ("original_url", "retrieval_date", "version_iri"):
+
+        expected_sha256 = ontology["expected_sha256"]
+        if expected_sha256 is not None:
+            _text(expected_sha256, "ontology.expected_sha256")
+            if len(expected_sha256) != 64 or any(
+                character not in "0123456789abcdefABCDEF"
+                for character in expected_sha256
+            ):
+                raise ValueError(
+                    "ontology.expected_sha256 must be null or a 64-digit SHA256"
+                )
+
+        for key in (
+            "canonical_url",
+            "original_url",
+            "retrieval_date",
+            "version_iri",
+        ):
             if ontology[key] is not None:
                 _text(ontology[key], f"ontology.{key}")
         # Exact type-sensitive policy equality (True must not substitute for 1).

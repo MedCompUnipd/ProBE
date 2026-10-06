@@ -56,21 +56,28 @@ internal stop remains a significant validation event.
 
 ## Single ontology snapshot
 
-One pinned official `go.owl` snapshot is used throughout the benchmark
-lifecycle. Both GOA releases are interpreted using the same vocabulary chosen for
-that benchmark; the same snapshot is used for construction and evaluation.
+Each experiment uses one user-selected `go.owl` snapshot.
 
-`go-plus.owl` is not used for node navigation or the scoring hierarchy. The
-master `go.owl` artifact contains the GO graph required by ProBE without the
-additional cross-ontology structure that makes `go-plus.owl` unsuitable for
-this workflow.
+The exact same `go.owl` artifact is used to normalize both START and END so
+that both temporal snapshots are interpreted in one common ontology reference
+space.
 
-This supersedes the branch's earlier proposal to project between two ontology
-snapshots. Consequences for obsolete, replacement, alternate, historical, and
-newly introduced terms must be explicitly tested and reported.
+ProBE requires `go.owl` for this workflow but does not impose a predefined
+`go.owl` release, release date, version IRI, or SHA-256.
 
-Record the ontology URL, retrieval date, version IRI, SHA-256, parser version, and
-relation-policy version. Never silently replace a published benchmark's ontology.
+`go-plus.owl` is not used for normalization, navigation, propagation, or the
+scoring hierarchy because its additional cross-ontology structure is outside
+the ontology graph required by this workflow.
+
+This supersedes the earlier proposal to project between two ontology snapshots.
+Consequences for obsolete, replacement, alternate, historical, and newly
+introduced terms must be explicitly tested and reported.
+
+For every experiment, record the SHA-256 of the exact supplied `go.owl` bytes
+and the parser and relation-policy versions. Source URL, retrieval date,
+ontology IRI, version IRI, and release date are recorded when available and
+otherwise remain explicitly unknown. Never silently replace the ontology
+snapshot selected for an experiment.
 
 ## Relations and propagation
 

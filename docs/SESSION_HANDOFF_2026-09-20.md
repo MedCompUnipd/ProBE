@@ -47,6 +47,12 @@ changed during the reconstruction.
 
 ### 3. Ontology policy changed from go-plus.owl to go.owl
 
+> Historical note: this section records the project state on 2026-09-20.
+> The current policy supersedes the wording below. ProBE now requires one
+> user-selected `go.owl` snapshot per experiment and uses that same exact
+> snapshot to normalize both START and END. No specific `go.owl` release is
+> imposed by ProBE. See `docs/ONTOLOGY_INPUT_POLICY.md`.
+
 The user explicitly decided that `go.owl` contains the information required by
 ProBE and that `go-plus.owl` is unsuitable for node navigation.
 
@@ -214,8 +220,9 @@ No real ontology/GOA/UniProt benchmark run has been performed for Requirements
 - Requirement 1 is implemented and synthetically tested.
 - Requirement 2 is implemented through canonical direct ground-truth
   candidates and synthetically tested.
-- `go.owl` is the authoritative master ontology throughout the code and current
-  documentation.
+- At the time of this historical handoff, the local `go.owl` artifact was
+  treated as the authoritative ontology. The current policy is the generic
+  user-selected `go.owl` policy in `docs/ONTOLOGY_INPUT_POLICY.md`.
 - The final evaluable ground truth remains intentionally blocked until the
   truth/mask milestone constructs and tests `Q`, `D_score`, `G_candidate`, `K0`,
   `D_neutral1`, `X1`, `M`, and `T`.

@@ -36,8 +36,8 @@ releases:
       deleted: inputs/end/taxonomy/delnodes.dmp
 ontology:
   path: inputs/ontology/go.owl
-  sha256: 42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666
-  canonical_url: http://purl.obolibrary.org/obo/go.owl
+  expected_sha256: null
+  canonical_url: null
   original_url: null
   retrieval_date: null
   version_iri: null

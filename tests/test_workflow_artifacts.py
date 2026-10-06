@@ -5,7 +5,6 @@ import pytest
 
 from probe.workflow import artifacts
 from probe.workflow.artifacts import Artifact, StageManifest, atomic_stage_bundle
-from probe.workflow.config import PINNED_GO_SHA256
 
 
 @pytest.fixture
@@ -16,7 +15,7 @@ def metadata():
         release_id="arbitrary-start",
         parameters={"policy_version": "fixture-v1"},
         ontology={
-            "sha256": PINNED_GO_SHA256,
+            "sha256": "0" * 64,
             "original_url": None,
             "retrieval_date": None,
             "version_iri": None,

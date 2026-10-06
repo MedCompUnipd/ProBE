@@ -17,7 +17,7 @@ The governing sources, in order, are:
 5. `DEVELOPMENT.md` and the current public code and tests.
 
 The work is divided into two approval gates. Milestone 2A establishes the
-ontology context and runs preflight on the real pinned release. Milestone 2B
+ontology context and runs preflight on the user-selected `go.owl` snapshot. Milestone 2B
 consumes the approved scoring projection and the canonical direct assertions
 and events from the completed first milestone. Neither milestone includes
 prediction ingestion, information content or information accretion, metrics,
@@ -39,7 +39,7 @@ Milestone 2A contains only:
 - cycle analysis on explicitly defined projections;
 - deterministic ontology preflight reporting;
 - synthetic loader, relation, and preflight tests;
-- execution against the real, locally pinned `go.owl` release.
+- execution of ontology preflight on the user-selected `go.owl` snapshot.
 
 Milestone 2A does not construct Q, closure truth, K0, D_score, D_neutral1, X1,
 M, or T. It may define stable handoff interfaces required by 2B. Completion of
@@ -113,24 +113,27 @@ needed by later layers rather than require the same in-memory object.
 
 The required provenance source is:
 
-```text
-http://purl.obolibrary.org/obo/go.owl
-```
+ProBE requires one user-selected `go.owl` snapshot for each experiment.
 
-This PURL is mobile and is not itself a reproducible pin. Milestone 2A must
-receive a local file plus `expected_sha256`, verify the checksum before parsing,
-and leave the file unchanged for the entire run. The implementation must not
-silently substitute `go-basic.owl`, `go-plus.owl`, a different date, or a
-separately downloaded import. Multiple projections of one
-loaded graph remain projections of the same ontology; they are not independent
-ontologies and must carry the same ontology identity.
+The same exact `go.owl` artifact must be used to normalize both START and END,
+so that both temporal snapshots are interpreted in one common ontology reference
+space.
 
-As of 2026-09-19, an ignored local `data/go.owl` artifact is available for
-engineering tests and ontology preflight. It is the selected master ontology;
-`go-plus.owl` is explicitly outside the navigation and scoring workflow. Its
-deterministic report is recorded in `docs/ONTOLOGY_PREFLIGHT_PROVISIONAL.md`.
-Acceptance requires pinning the exact `go.owl` bytes and human review of its
-report.
+The implementation must calculate the SHA-256 of the supplied `go.owl` before
+parsing and record the observed digest in run provenance. The user may
+optionally provide `expected_sha256`; when supplied, it is an integrity
+assertion and must match the observed digest.
+
+ProBE does not impose a predefined `go.owl` release, release date, version IRI,
+or SHA-256.
+
+The implementation must not silently substitute `go-basic.owl`, `go-plus.owl`,
+another `go.owl` snapshot, or a separately downloaded import. Multiple
+projections of one loaded graph remain projections of the same ontology and
+must carry the same ontology identity.
+
+The current ontology input contract is defined in
+`docs/ONTOLOGY_INPUT_POLICY.md`.
 
 When the file is supplied, the preflight must perform these checks without
 network access:
@@ -140,30 +143,35 @@ network access:
 3. identify the `owl:Ontology` node, ontology IRI, `owl:versionIRI`, and declared
    `owl:imports`;
 4. obtain the release date from explicit ontology metadata or a documented
-   version-IRI parser; never infer it from GOA0 or GOA1;
+   version-IRI parser; never infer it from START or END annotation data;
 5. record loader configuration, parser and RDFLib versions, import policy,
    relation-policy version, and axiom mode;
 6. enumerate all class and object-property IRIs before constructing projections;
 7. inventory all extracted edges, including unknown relations and external
    endpoints;
 8. run property, cycle, aspect, and root-reachability validation;
-9. refuse benchmark construction if the checksum differs, required fingerprint
-   fields are absent, or the
-   propagation graph has fatal validation issues.
+9. refuse benchmark construction if a configured `expected_sha256` differs
+   from the observed checksum, required provenance fields are absent,
+   or the propagation graph has fatal validation issues.
 
-The ontology identity must include:
+The ontology provenance record must always include:
 
-- source URL and local source name;
-- ontology IRI;
-- version IRI;
-- declared release date;
-- retrieval date;
+- local source name or configured local input path;
 - SHA-256 of the exact OWL file;
 - declared import IRIs and their local-definition status;
 - loader configuration and software versions;
 - axiom mode, without claiming that RDFLib can determine whether asserted
   triples were produced by an earlier materialization process;
 - relation-policy version.
+
+The following provenance fields must be recorded when available and otherwise
+remain explicitly null rather than being inferred or invented:
+
+- source URL;
+- ontology IRI;
+- version IRI;
+- declared release date;
+- retrieval date.
 
 The first preflight import policy is `DECLARATION_ONLY_NO_NETWORK`:
 
@@ -178,8 +186,10 @@ The first preflight import policy is `DECLARATION_ONLY_NO_NETWORK`:
 `PINNED_LOCAL_IMPORT_CLOSURE` remains a future policy requiring separate local
 artifacts and checksums. The initial milestone uses asserted triples and only
 the explicitly supported structural reconstruction described below. It performs
-no implicit downloads and introduces no reasoner. No official release is
-approved until this preflight has run on the real pinned file.
+no implicit downloads and introduces no reasoner.
+
+The user-selected `go.owl` snapshot must pass this preflight before it is
+used to normalize START and END in the experiment.
 
 ## 4. Complete graph and derived projections
 
@@ -473,7 +483,7 @@ preflight before approval.
 
 ### 7.4 Deterministic preflight algorithm
 
-Given one locally pinned `go.owl`:
+Given one user-selected `go.owl` snapshot whose exact bytes are fixed for the experiment:
 
 1. construct and validate `OntologyFingerprint` from bytes, ontology metadata,
    axiom mode, import policy, relation-policy fingerprint, and loader-
@@ -846,9 +856,10 @@ code as an empty truth case. Its audit record must distinguish at least:
 The following decisions are already consistent across the user proposal,
 project instructions, and benchmark specification:
 
-1. `O` is one explicitly supplied, pinned release of official `go.owl`; it
-   is not inferred from either annotation date and is never silently replaced by
-   `go-basic.owl` or another ontology.
+1. `O` is one explicitly supplied, user-selected `go.owl` snapshot. The
+   same exact artifact is used for START and END; it is not inferred from
+   either temporal snapshot and is never silently replaced by `go-basic.owl`,
+   `go-plus.owl`, or another `go.owl` snapshot.
 2. The complete graph and every projection derive from an ontology context with
    the same stable `OntologyFingerprint`.
 3. Old and new snapshots, event classification, closure, masks, prediction
@@ -1363,7 +1374,7 @@ requirement.
    edges. Quarantine `NO_IS_A_ROOT_PATH_BUT_SAFE_PART_OF_PATH`; do not construct
    Q yet.
 9. Emit a deterministic report with counts and examples. Stop for human review
-   of the real pinned `go.owl` report.
+   of the preflight report for the user-selected `go.owl` snapshot.
 
 ### 13.2 Milestone 2B algorithm
 
@@ -1569,9 +1580,9 @@ Milestone 2A is acceptable when:
    intra-aspect `is_a` root path;
 7. part-of-only root paths are quarantined and never admitted to Q implicitly;
 8. preflight output is deterministic under RDF-triple permutation;
-9. the real pinned file is run through preflight and its counts, examples,
-   quarantines, unknowns, unsupported constructs, imports, and cycles are
-   reviewed by a human;
+9. the user-selected `go.owl` snapshot is run through preflight and its counts,
+   examples, quarantines, unknowns, unsupported constructs, imports, and cycles
+   are reviewed by a human;
 10. no 2B truth or mask implementation begins before that approval;
 11. existing tests, all implemented PF tests, Ruff, format check,
     `git diff --check`, and `pixi run check` pass.

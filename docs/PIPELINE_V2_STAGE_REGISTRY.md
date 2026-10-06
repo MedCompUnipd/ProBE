@@ -97,7 +97,7 @@ Directional glocal affine FULL dynamic programming:
 | 00 | common, optional | Source-specific raw target adapter to canonical target-input contract | configured raw source | foundation declared; adapter-specific implementation required |
 | 01 | common | Validate/prepare canonical targets | Stage 00 or canonical target input | existing ProBE implementation; workflow migration pending |
 | 01A_FULL | per release | Build enriched FULL UniProt V2 representation from Swiss-Prot then TrEMBL | configured UniProt DAT sources | validated oracle; production workflow migration pending |
-| 01B0 | common | Compile pinned GO policy | pinned GO ontology | validated/frozen; migration pending |
+| 01B0 | common | Compile GO normalization policy | user-supplied GO ontology snapshot | validated/frozen; migration pending |
 | 01B1 | per release | Normalize GOA against GO policy and FULL V2 accession universe | 01A_FULL, 01B0, GOA | validated/frozen; migration pending |
 | 01C | per release | Build GO-positive V2 fast-search universe | 01A_FULL, 01B1 | validated/frozen; migration pending |
 | 02A | per release | Extract unique OX values from GO-positive V2 | 01C | validated/frozen; migration pending |
@@ -153,18 +153,34 @@ not a CAFA-specific production dependency.
 
 ---
 
-## GO provenance
+## GO ontology input and provenance
 
-The validated GO snapshot is pinned by SHA256:
+The GO ontology snapshot is a user-supplied experiment input.
+
+Production ProBE does not require a particular GO release or a hard-coded
+ontology SHA256.
+
+For every run, ProBE computes the SHA256 of the supplied ontology and records
+the observed digest in scientific provenance.
+
+Configuration may optionally provide `expected_sha256`. When supplied, this is
+an integrity assertion by the user and the observed file digest must match it.
+When omitted/null, the ontology remains valid input and its observed digest is
+recorded without imposing a predefined release.
+
+`canonical_url`, `original_url`, `retrieval_date`, and `version_iri` are
+optional provenance metadata. Unknown values remain explicitly null and must
+never be invented.
+
+### Validation oracle
+
+The ontology used for the validated candidate-pipeline-v2 regression has
+SHA256:
 
 `42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666`
 
-Canonical ontology location:
-
-`http://purl.obolibrary.org/obo/go.owl`
-
-Historical original URL, retrieval date, or version IRI may be unavailable.
-Unknown values must remain explicitly null and must never be invented.
+That digest belongs to the TESTING golden oracle only. It is not a production
+restriction.
 
 ---
 

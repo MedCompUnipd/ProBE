@@ -28,8 +28,9 @@ These decisions should not be changed incidentally. Record a proposal under
 4. **Release pairs are generic.** Acquisition uses the roles `start` and `end`;
    release identifiers and dates remain explicit provenance rather than API
    constants.
-5. **One ontology is pinned.** Both annotation releases are interpreted through
-   the same immutable GO snapshot. Its date is an independent benchmark input.
+5. **One `go.owl` snapshot per experiment.** Both annotation releases are
+   interpreted through the same user-selected immutable `go.owl` snapshot.
+   Its release identity is independent provenance for the experiment.
 6. **Evidence is a policy.** Evidence types form named categories and explicit
    accepted transitions, not a universal confidence score.
 7. **Parsing preserves information.** Qualifiers, negation, references,
@@ -94,7 +95,7 @@ Status values are `planned`, `active`, `blocked`, and `complete`.
 | M1 | Source handling and structured validation | complete | initial scaffold | Plain paths, gzip, checksums, structured issues |
 | M2 | Streaming FASTA and GAF readers | complete | initial scaffold | Synthetic coverage complete; historical fixtures belong to M6 |
 | M3 | Exact sequence index and alias matching | complete | initial scaffold | In-memory exact path complete; full-release profiling belongs to M7 |
-| M4 | GO OWL loader and ontology semantics | active | current branch | `go.owl` is the master ontology; Milestone 2A context, exact-IRI edge policy, deterministic preflight, and synthetic tests are implemented; final report review remains required |
+| M4 | GO OWL loader and ontology semantics | active | current branch | ProBE uses one user-selected `go.owl` snapshot per experiment; Milestone 2A context, exact-IRI edge policy, deterministic preflight, and synthetic tests are implemented |
 | M4P | Release preprocessing and synchronization | complete | current branch | Flag-based CLI canonicalizes GO IDs, retains NOT provenance, removes every root row, restricts GOA to FASTA ACCIDs, writes an ACCID-only missing log, and filters FASTA to proteins with valid non-root annotations; a disposable SQLite index bounds memory for the documented 109 GB FASTA and 178 GB GOA inputs |
 | M4T | Target ID mapping and exact sequence matching | complete | current branch | Deterministic T+9 IDs, heterogeneous-header mapping, policy-versioned symmetric normalization, hash-indexed exact matching, and UniProt ACCID extraction implemented |
 | M4A | Reproducible upstream acquisition | complete | current branch | Explicit TOML-selected `start`/`end` UniProt, GOA, taxonomy, and optional ontology inputs; streaming atomic downloads, safe extraction, disk preflight, checksums, manifests, validation, and repair behavior implemented without biological parsing |
@@ -118,10 +119,12 @@ closure against the intended evaluation protocol before publishing a benchmark.
 The Milestone 2A implementation now inventories every observed property and
 assigns a disposition per extracted edge. `is_a` and same-aspect `part_of` are
 the only propagating cases. Subproperties do not inherit propagation permission.
-The current `go.owl` report is recorded in
-`docs/ONTOLOGY_PREFLIGHT_PROVISIONAL.md`. `go-plus.owl` is not used for node
-navigation or scoring. Final acceptance still requires review of the pinned
-`go.owl` checksum and report.
+The ontology policy is defined in `docs/ONTOLOGY_INPUT_POLICY.md`.
+Each experiment uses one user-selected `go.owl` snapshot as the common
+reference space for both START and END normalization. The exact ontology bytes
+used by a run are identified by their observed SHA-256 and recorded in
+provenance. ProBE does not require a predefined `go.owl` release. `go-plus.owl`
+is not used for normalization, navigation, propagation, or scoring.
 
 Truth/mask construction exposes two root-eligibility policies. The conservative
 `is_a_rooted` profile keeps part-of-only paths quarantined; `safe_root_paths`
