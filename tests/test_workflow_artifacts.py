@@ -200,3 +200,24 @@ def test_manifest_allows_no_ontology_for_pre_ontology_stage(
 
     assert manifest.stage == "01A_FULL"
     assert manifest.ontology is None
+
+
+def test_empty_precreated_destination_can_be_published_atomically(
+    tmp_path, metadata
+):
+    destination = tmp_path / "bundle"
+    destination.mkdir()
+
+    with atomic_stage_bundle(destination, **metadata) as staging:
+        assert not destination.exists()
+        (staging / "facts.tsv").write_text(
+            "complete\n",
+            encoding="utf-8",
+        )
+
+    manifest = artifacts.validate_bundle(destination, deep=True)
+
+    assert manifest.status == "complete"
+    assert (destination / "facts.tsv").read_text(
+        encoding="utf-8"
+    ) == "complete\n"

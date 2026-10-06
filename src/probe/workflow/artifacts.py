@@ -250,9 +250,11 @@ def atomic_stage_bundle(
 ) -> Iterator[Path]:
     """Publish a new immutable bundle by one same-filesystem directory rename.
 
-    A sibling lock prevents concurrent publishers; no existing bundle is replaced.
-    After process death, an operator must verify no writer survives before clearing
-    its orphan lock/temp directory. This is publication protection, not job state.
+    A sibling lock prevents concurrent publishers. An existing empty directory is
+    treated as an orchestration-created placeholder and removed under the lock;
+    an existing bundle or any nonempty destination is never replaced. After
+    process death, an operator must verify no writer survives before clearing its
+    orphan lock/temp directory. This is publication protection, not job state.
     """
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -260,8 +262,13 @@ def atomic_stage_bundle(
     lock.mkdir()  # Exclusive across cooperating writers.
     staging: Path | None = None
     try:
-        if destination.exists() or destination.is_symlink():
+        if destination.is_symlink():
             raise FileExistsError(destination)
+        if destination.exists():
+            if not destination.is_dir() or any(destination.iterdir()):
+                raise FileExistsError(destination)
+            destination.rmdir()
+
         staging = Path(
             tempfile.mkdtemp(prefix=f".{destination.name}.", dir=destination.parent)
         )

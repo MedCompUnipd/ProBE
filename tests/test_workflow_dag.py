@@ -112,14 +112,14 @@ def test_real_snakemake_dag_structure(tmp_path, adapter):
 
 
 def test_dry_run_and_unimplemented_stage_fails_closed(tmp_path):
-    config = workflow_config(tmp_path)
+    config = workflow_config(tmp_path, adapter=True)
     result = invoke(tmp_path, config, "--dry-run")
     assert result.returncode == 0, result.stdout + result.stderr
-    result = invoke(tmp_path, config, "stage_01")
+    result = invoke(tmp_path, config, "stage_00")
     assert result.returncode != 0
     assert "not implemented in Block 1" in result.stdout + result.stderr
-    assert not (tmp_path / "work/pipeline-v2/common/01").exists()
-    log = tmp_path / "logs/pipeline-v2/common/01.log"
+    assert not (tmp_path / "work/pipeline-v2/common/00").exists()
+    log = tmp_path / "logs/pipeline-v2/common/00.log"
     assert "No scientific outputs" in log.read_text()
 
 

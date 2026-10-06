@@ -1,4 +1,4 @@
-# Workflow foundation only: scientific stage bodies fail closed in Block 1.
+# Migrated scientific stages run production implementations; remaining stages fail closed.
 # Invoke from the project root, or supply paths relative to --directory.
 from pathlib import Path
 
@@ -8,6 +8,24 @@ configfile: str(Path(workflow.basedir).parent / "config" / "pipeline.yaml")
 
 cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1"}
+
+PROJECT_ROOT = Path(workflow.basedir).parent.resolve()
+RELEASE_FASTA_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-release-fasta"
+    / "probe-release-fasta-v2"
+)
+RELEASE_FASTA_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+    *[
+        str(path)
+        for path in sorted((PROJECT_ROOT / "cpp").rglob("*"))
+        if path.is_file()
+    ],
+]
 
 
 def bundle(stage, role=None):
@@ -59,9 +77,21 @@ if cfg.uses_adapter:
         script:
             "scripts/unimplemented_stage.py"
 
+rule build_release_fasta:
+    input:
+        RELEASE_FASTA_BUILD_INPUTS
+    output:
+        RELEASE_FASTA_BINARY
+    log:
+        stage_log("build-release-fasta")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && pixi run build-release-fasta > {log:q} 2>&1"
+
 rule stage_01:
     input:
-        ([bundle("00")] if cfg.uses_adapter else cfg.target_inputs())
+        sources=([bundle("00")] if cfg.uses_adapter else cfg.target_inputs())
     output:
         bundle("01")
     log:
@@ -78,11 +108,12 @@ rule stage_01:
         mem_mb=cfg.resources("01")["mem_mb"],
         runtime=cfg.resources("01")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_01.py"
 
 rule stage_01A_FULL:
     input:
-        lambda w: cfg.release(w.role)["uniprot_sources"]
+        sources=lambda w: cfg.release(w.role)["uniprot_sources"],
+        binary=RELEASE_FASTA_BINARY
     output:
         bundle("01A_FULL", "{role}")
     log:
@@ -99,11 +130,11 @@ rule stage_01A_FULL:
         mem_mb=cfg.resources("01A_FULL")["mem_mb"],
         runtime=cfg.resources("01A_FULL")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_01A_FULL.py"
 
 rule stage_01B0:
     input:
-        cfg.data["ontology"]["path"]
+        owl=cfg.data["ontology"]["path"]
     output:
         bundle("01B0")
     log:
@@ -120,7 +151,7 @@ rule stage_01B0:
         mem_mb=cfg.resources("01B0")["mem_mb"],
         runtime=cfg.resources("01B0")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_01B0.py"
 
 rule stage_01B1:
     input:
