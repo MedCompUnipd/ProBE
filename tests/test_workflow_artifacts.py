@@ -179,3 +179,24 @@ def test_atomic_publication_fsyncs_stage_and_parent(
     assert len(calls) == 2
     assert calls[0].parent == tmp_path
     assert calls[1] == tmp_path
+
+
+def test_manifest_allows_no_ontology_for_pre_ontology_stage(
+    tmp_path, metadata
+):
+    metadata = dict(metadata)
+    metadata["ontology"] = None
+    metadata["stage"] = "01A_FULL"
+
+    destination = tmp_path / "bundle"
+
+    with atomic_stage_bundle(destination, **metadata) as staging:
+        (staging / "artifact.txt").write_text(
+            "ontology-independent\n",
+            encoding="utf-8",
+        )
+
+    manifest = artifacts.validate_bundle(destination, deep=True)
+
+    assert manifest.stage == "01A_FULL"
+    assert manifest.ontology is None

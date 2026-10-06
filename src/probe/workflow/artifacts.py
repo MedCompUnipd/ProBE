@@ -82,16 +82,19 @@ class Artifact:
 class StageManifest:
     """Schema v1: completion describes evidence production, never entity identity.
 
-    Inputs refer to source files or upstream manifests. Missing historical ontology
-    metadata remains null. Implementation includes version/build fingerprints;
-    parameters include scientific policy and operational settings for audit.
+    Inputs refer to source files or upstream manifests. ``ontology`` is null for
+    stages that do not depend on GO; once ontology is an actual dependency, its
+    exact observed identity is recorded. Missing historical ontology provenance
+    fields remain explicitly null. Implementation includes version/build
+    fingerprints; parameters include scientific policy and operational settings
+    for audit.
     """
 
     stage: str
     role: str | None
     release_id: str | None
     parameters: Mapping[str, Any]
-    ontology: Mapping[str, Any]
+    ontology: Mapping[str, Any] | None
     implementation: Mapping[str, Any]
     inputs: tuple[Artifact, ...]
     outputs: tuple[Artifact, ...]
@@ -119,19 +122,25 @@ class StageManifest:
             raise ValueError("release_id must be nonempty")
         for value in (
             self.parameters,
-            self.ontology,
             self.implementation,
             self.environment,
         ):
             if not isinstance(value, Mapping):
                 raise ValueError("manifest metadata must be mappings")
+
+        if self.ontology is not None:
+            if not isinstance(self.ontology, Mapping):
+                raise ValueError("ontology metadata must be a mapping or null")
+            digest = self.ontology.get("sha256")
+            if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
+                raise ValueError("ontology SHA256 is required when ontology is used")
+            required_go = {"original_url", "retrieval_date", "version_iri"}
+            if not required_go.issubset(self.ontology):
+                raise ValueError(
+                    "unknown ontology provenance must be explicit null fields"
+                )
+
         _validate_utc_timestamp(self.created_at_utc)
-        digest = self.ontology.get("sha256")
-        if not isinstance(digest, str) or not _DIGEST.fullmatch(digest):
-            raise ValueError("ontology SHA256 is required")
-        required_go = {"original_url", "retrieval_date", "version_iri"}
-        if not required_go.issubset(self.ontology):
-            raise ValueError("unknown ontology provenance must be explicit null fields")
         for key in ("name", "version"):
             if (
                 not isinstance(self.implementation.get(key), str)
@@ -233,7 +242,7 @@ def atomic_stage_bundle(
     role: str | None,
     release_id: str | None,
     parameters: Mapping[str, Any],
-    ontology: Mapping[str, Any],
+    ontology: Mapping[str, Any] | None,
     implementation: Mapping[str, Any],
     inputs: tuple[Artifact, ...] = (),
     environment: Mapping[str, Any] | None = None,
