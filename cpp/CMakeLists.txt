@@ -21,3 +21,8 @@ add_executable(
     probe-goa-normalize-v1
     src/probe_goa_normalize_v1.cpp
 )
+
+add_executable(
+    probe-go-positive-filter-v1
+    src/probe_go_positive_filter_v1.cpp
+)

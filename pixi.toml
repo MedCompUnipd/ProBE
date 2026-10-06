@@ -36,3 +36,5 @@ build-release-fasta = "cmake -S cpp -B .pixi/build/probe-release-fasta -G Ninja 
 release-fasta-v2 = ".pixi/build/probe-release-fasta/probe-release-fasta-v2"
 build-goa-normalize = "cmake -S cpp -B .pixi/build/probe-goa-normalize -G Ninja && cmake --build .pixi/build/probe-goa-normalize --target probe-goa-normalize-v1"
 goa-normalize-v1 = ".pixi/build/probe-goa-normalize/probe-goa-normalize-v1"
+build-go-positive-filter = "cmake -S cpp -B .pixi/build/probe-go-positive-filter -G Ninja && cmake --build .pixi/build/probe-go-positive-filter --target probe-go-positive-filter-v1"
+go-positive-filter-v1 = ".pixi/build/probe-go-positive-filter/probe-go-positive-filter-v1"

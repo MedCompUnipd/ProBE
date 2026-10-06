@@ -26,6 +26,14 @@ GOA_NORMALIZE_BINARY = str(
     / "probe-goa-normalize-v1"
 )
 
+GO_POSITIVE_FILTER_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-go-positive-filter"
+    / "probe-go-positive-filter-v1"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -40,6 +48,11 @@ RELEASE_FASTA_BUILD_INPUTS = [
 GOA_NORMALIZE_BUILD_INPUTS = [
     *NATIVE_BUILD_SHARED_INPUTS,
     str(PROJECT_ROOT / "cpp" / "src" / "probe_goa_normalize_v1.cpp"),
+]
+
+GO_POSITIVE_FILTER_BUILD_INPUTS = [
+    *NATIVE_BUILD_SHARED_INPUTS,
+    str(PROJECT_ROOT / "cpp" / "src" / "probe_go_positive_filter_v1.cpp"),
 ]
 
 
@@ -115,6 +128,19 @@ rule build_goa_normalize:
         project_root=str(PROJECT_ROOT)
     shell:
         "cd {params.project_root:q} && pixi run build-goa-normalize > {log:q} 2>&1"
+
+
+rule build_go_positive_filter:
+    input:
+        GO_POSITIVE_FILTER_BUILD_INPUTS
+    output:
+        GO_POSITIVE_FILTER_BINARY
+    log:
+        stage_log("build-go-positive-filter")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && pixi run build-go-positive-filter > {log:q} 2>&1"
 
 
 rule stage_01:
@@ -197,25 +223,23 @@ rule stage_01B1:
 
 rule stage_01C:
     input:
-        bundle("01A_FULL", "{role}"),
-        bundle("01B1", "{role}")
+        release_manifest=bundle("01A_FULL", "{role}"),
+        positive_manifest=bundle("01B1", "{role}"),
+        binary=GO_POSITIVE_FILTER_BINARY
     output:
         bundle("01C", "{role}")
     log:
         stage_log("01C", "{role}")
     params:
-        stage="01C",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="01C"
     threads:
         cfg.resources("01C")["threads"]
     resources:
         mem_mb=cfg.resources("01C")["mem_mb"],
         runtime=cfg.resources("01C")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_01C.py"
+
 
 rule stage_02A:
     input:
