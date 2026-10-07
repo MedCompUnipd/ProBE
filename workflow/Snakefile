@@ -102,6 +102,14 @@ TAXONOMY_MODULE = str(
     / "taxonomy.py"
 )
 
+
+FULL_OX_TAXONOMY_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "04D0_prepare_full_ox_taxonomy.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -504,25 +512,24 @@ rule stage_04D0a:
 
 rule stage_04D0b:
     input:
-        bundle("04D0a", "{role}"),
-        bundle("02B", "{role}")
+        ox_manifest=bundle("04D0a", "{role}"),
+        taxonomy_manifest=bundle("02B", "{role}"),
+        implementation_script=FULL_OX_TAXONOMY_SCRIPT,
+        taxonomy_module=TAXONOMY_MODULE
     output:
         bundle("04D0b", "{role}")
     log:
         stage_log("04D0b", "{role}")
     params:
-        stage="04D0b",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="04D0b"
     threads:
         cfg.resources("04D0b")["threads"]
     resources:
         mem_mb=cfg.resources("04D0b")["mem_mb"],
         runtime=cfg.resources("04D0b")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04D0b.py"
+
 
 rule stage_04D1:
     input:

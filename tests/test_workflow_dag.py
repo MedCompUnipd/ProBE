@@ -288,3 +288,32 @@ def test_stage_04d0a_reuses_production_raw_ox_extractor():
     assert 'ontology=cfg.data["ontology"]' not in block
     assert "release_config=" not in block
     assert "target_contract=" not in block
+
+
+def test_stage_04d0b_resolves_full_ox_with_release_taxonomy_index():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04D0b:")
+    end = text.index("rule stage_04D1:", start)
+    block = text[start:end]
+
+    assert 'ox_manifest=bundle("04D0a", "{role}")' in block
+    assert 'taxonomy_manifest=bundle("02B", "{role}")' in block
+    assert "implementation_script=FULL_OX_TAXONOMY_SCRIPT" in block
+    assert "taxonomy_module=TAXONOMY_MODULE" in block
+    assert 'stage="04D0b"' in block
+    assert '"scripts/run_stage_04D0b.py"' in block
+
+    assert 'bundle("01C"' not in block
+    assert 'bundle("02A"' not in block
+    assert 'bundle("03"' not in block
+
+    assert "nodes=" not in block
+    assert "names=" not in block
+    assert "merged=" not in block
+    assert "delnodes=" not in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
