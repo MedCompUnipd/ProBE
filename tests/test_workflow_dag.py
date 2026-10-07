@@ -509,3 +509,54 @@ def test_stage_05b_uses_configured_k_without_frozen_k7_schema():
 
     assert 'policy["k"]' in runner
     assert 'cfg.data["scientific"]' not in runner
+
+
+def test_stage_05r0_prepares_lossless_rescue_subset():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_05R0:")
+    rest = text[start:]
+    next_rule = rest.index("\nrule ", len("rule stage_05R0:"))
+    block = rest[:next_rule]
+
+    assert 'uncovered_manifest=bundle("05B")' in block
+    assert 'targets_manifest=bundle("01")' in block
+    assert 'target_taxonomy_manifest=bundle("02B", "{role}")' in block
+    assert "implementation_script=RESCUE_TARGET_PREPARATION_SCRIPT" in block
+
+    assert 'bundle("05R0", "{role}")' in block
+    assert 'stage="05R0"' in block
+    assert '"scripts/run_stage_05R0.py"' in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_05r0_consumes_searchability_fact_without_rereading_k():
+    repo_root = SNAKEFILE.parent.parent
+
+    pipeline_script = (
+        repo_root
+        / "scripts"
+        / "pipeline"
+        / "05R0_prepare_rescue_targets.py"
+    ).read_text(encoding="utf-8")
+
+    runner = (
+        repo_root
+        / "workflow"
+        / "scripts"
+        / "run_stage_05R0.py"
+    ).read_text(encoding="utf-8")
+
+    assert "kmer_sequence_searchable" in pipeline_script
+    assert "STAGE05B_UNCOVERED_AND_K_SEARCHABLE" in pipeline_script
+
+    assert "k7_sequence_searchable" not in pipeline_script
+    assert "STAGE05B_UNCOVERED_AND_K7_SEARCHABLE" not in pipeline_script
+    assert "--k" not in pipeline_script
+
+    assert 'cfg.data["scientific"]' not in runner
+    assert 'policy["k"]' not in runner

@@ -163,6 +163,14 @@ UNCOVERED_TARGET_AUDIT_SCRIPT = str(
     / "05B_audit_uncovered_targets.py"
 )
 
+
+RESCUE_TARGET_PREPARATION_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "05R0_prepare_rescue_targets.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -708,26 +716,23 @@ rule stage_05B:
 
 rule stage_05R0:
     input:
-        bundle("05B"),
-        bundle("01"),
-        bundle("02B", "{role}")
+        uncovered_manifest=bundle("05B"),
+        targets_manifest=bundle("01"),
+        target_taxonomy_manifest=bundle("02B", "{role}"),
+        implementation_script=RESCUE_TARGET_PREPARATION_SCRIPT
     output:
         bundle("05R0", "{role}")
     log:
         stage_log("05R0", "{role}")
     params:
-        stage="05R0",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="05R0"
     threads:
         cfg.resources("05R0")["threads"]
     resources:
         mem_mb=cfg.resources("05R0")["mem_mb"],
         runtime=cfg.resources("05R0")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05R0.py"
 
 rule stage_05R1:
     input:
