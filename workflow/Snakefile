@@ -175,6 +175,14 @@ FINAL_CANDIDATE_UNION_SCRIPT = str(
     PROJECT_ROOT / "scripts" / "pipeline" / "05A2_finalize_candidate_union.py"
 )
 
+FINAL_TAXONOMY_AUDIT_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "05C2_freeze_taxonomy_audit_channel.py"
+)
+
+
 
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
@@ -793,25 +801,23 @@ rule stage_05A2:
 
 rule stage_05C2:
     input:
-        bundle("05A2"),
-        both("04B")
+        final_union_manifest=bundle("05A2"),
+        start_anchor_manifest=bundle("04B", "START"),
+        end_anchor_manifest=bundle("04B", "END"),
+        implementation_script=FINAL_TAXONOMY_AUDIT_SCRIPT
     output:
         bundle("05C2")
     log:
         stage_log("05C2")
     params:
-        stage="05C2",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="05C2"
     threads:
         cfg.resources("05C2")["threads"]
     resources:
         mem_mb=cfg.resources("05C2")["mem_mb"],
         runtime=cfg.resources("05C2")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05C2.py"
 
 rule stage_05R_POST:
     input:
