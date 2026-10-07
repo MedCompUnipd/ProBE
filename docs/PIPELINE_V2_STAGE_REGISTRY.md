@@ -95,34 +95,34 @@ Directional glocal affine FULL dynamic programming:
 | Stage | Scope | Purpose | Principal dependencies | Production status |
 |---|---|---|---|---|
 | 00 | common, optional | Source-specific raw target adapter to canonical target-input contract | configured raw source | foundation declared; adapter-specific implementation required |
-| 01 | common | Validate/prepare canonical targets | Stage 00 or canonical target input | existing ProBE implementation; workflow migration pending |
-| 01A_FULL | per release | Build enriched FULL UniProt V2 representation from Swiss-Prot then TrEMBL | configured UniProt DAT sources | validated oracle; production workflow migration pending |
-| 01B0 | common | Compile GO normalization policy | user-supplied GO ontology snapshot | validated/frozen; migration pending |
-| 01B1 | per release | Normalize GOA against GO policy and FULL V2 accession universe | 01A_FULL, 01B0, GOA | validated/frozen; migration pending |
-| 01C | per release | Build GO-positive V2 fast-search universe | 01A_FULL, 01B1 | validated/frozen; migration pending |
-| 02A | per release | Extract unique OX values from GO-positive V2 | 01C | validated/frozen; migration pending |
-| 02B | per release | Build taxonomy index and target/GO-positive taxonomy contexts | 01, 02A, configured taxonomy snapshot | validated/frozen; migration pending |
-| 03 | per release | Primary sequence-candidate discovery in GO-positive V2 | 01, 01C, 02B | validated/frozen; migration pending |
-| 04A | per release | Find exact PRIMARY/SECONDARY accession anchors in FULL V2 | 01, 01A_FULL | validated/frozen; migration pending |
-| 04B | per release | Classify direct anchors by taxonomy eligibility | 04A, 02B | validated/frozen; migration pending |
-| 04C | common | Compile one-hop documentary lineage keys | 01, START+END 04B | validated/frozen; migration pending |
-| 04D0a | per release | Extract unique OX values from FULL V2 | 01A_FULL | validated/frozen helper; migration pending |
-| 04D0b | per release | Resolve FULL-V2 OX taxonomy contexts | 04D0a, 02B taxonomy index | validated/frozen helper; migration pending |
-| 04D1 | common | Prepare release-aware lineage scan index | 01, 04C, START+END 04B/02B | validated/frozen; migration pending |
-| 04D2 | per release | Scan FULL V2 for one-hop lineage evidence | 04D1, 04D0b, 01A_FULL | validated/frozen; migration pending |
-| 04E | per release | Collapse lineage evidence to unique target-record pairs | 04D2 | validated/frozen; migration pending |
-| 05A | common | Baseline union of GO-positive sequence and lineage channels | START+END 03, START+END 04E | validated/frozen; migration pending |
-| 05B | common | Audit targets uncovered by baseline candidate union | 01, 05A, START+END 04B | validated/frozen; migration pending |
-| 05R0 | per release | Select strict rescue targets: baseline-uncovered and k=7 searchable | 05B, 01, 02B | production-required helper contract; implementation pending |
-| 05R1 | per release | Strict FULL-V2 sequence rescue using exactly Stage 03 algorithm/thresholds | 05R0, 04D0b, 01A_FULL | validated/frozen behavior; production implementation pending |
-| 05A2 | common | Final candidate union including strict FULL-V2 rescue | 05A, START+END 05R1 | validated/frozen; migration pending |
-| 05C2 | common | Final taxonomy audit channel based on final candidate union | 05A2, START+END 04B | validated/frozen; migration pending |
-| 05R_POST | common | Explicit post-rescue unresolved-target report | 05B, 05R0, 05R1, 05A2, 05C2, taxonomy/anchor contexts | production helper contract; implementation pending |
-| 05D | per release | Materialize candidate sequences from FULL V2 for primary and permitted audit rows | 05A2, 05C2, 01A_FULL | validated/frozen; migration pending |
-| 06A | common | Build canonical alignment job table | 01, 05A2, 05C2, START+END 05D | validated/frozen; migration pending |
-| NONEXACT | common | Select non-exact jobs requiring dynamic programming | 06A | production helper contract; implementation pending |
-| 06C0 | common | Compute exact affine FULL-DP directional glocal alignments for NONEXACT jobs | NONEXACT, 01, START+END 05D | validated/frozen; migration pending |
-| 06C1 | common | Combine synthesized exact results and 06C0 non-exact results into canonical pre-resolver output | 06A, 06C0 | validated/frozen; migration pending |
+| 01 | common | Validate/prepare canonical targets | Stage 00 or canonical target input | production-integrated; validated |
+| 01A_FULL | per release | Build enriched FULL UniProt V2 representation from Swiss-Prot then TrEMBL | configured UniProt DAT sources | production-integrated; validated |
+| 01B0 | common | Compile GO normalization policy | user-supplied GO ontology snapshot | production-integrated; validated |
+| 01B1 | per release | Normalize GOA against GO policy and FULL V2 accession universe | 01A_FULL, 01B0, GOA | production-integrated; validated |
+| 01C | per release | Build GO-positive V2 fast-search universe | 01A_FULL, 01B1 | production-integrated; validated |
+| 02A | per release | Extract unique OX values from GO-positive V2 | 01C | production-integrated; validated |
+| 02B | per release | Build taxonomy index and target/GO-positive taxonomy contexts | 01, 02A, configured taxonomy snapshot | production-integrated; validated |
+| 03 | per release | Primary sequence-candidate discovery in GO-positive V2 | 01, 01C, 02B | production-integrated; validated |
+| 04A | per release | Find exact PRIMARY/SECONDARY accession anchors in FULL V2 | 01, 01A_FULL | production-integrated; validated |
+| 04B | per release | Classify direct anchors by taxonomy eligibility | 04A, 02B | production-integrated; validated |
+| 04C | common | Compile one-hop documentary lineage keys | 01, START+END 04B | production-integrated; validated |
+| 04D0a | per release | Extract unique OX values from FULL V2 | 01A_FULL | production-integrated; validated |
+| 04D0b | per release | Resolve FULL-V2 OX taxonomy contexts | 04D0a, 02B taxonomy index | production-integrated; validated |
+| 04D1 | common | Prepare release-aware lineage scan index | 01, 04C, START+END 04B/02B | production-integrated; validated |
+| 04D2 | per release | Scan FULL V2 for one-hop lineage evidence | 04D1, 04D0b, 01A_FULL | production-integrated; validated |
+| 04E | per release | Collapse lineage evidence to unique target-record pairs | 04D2 | production-integrated; validated |
+| 05A | common | Baseline union of GO-positive sequence and lineage channels | START+END 03, START+END 04E | production-integrated; validated |
+| 05B | common | Audit targets uncovered by baseline candidate union | 01, 05A, START+END 04B | production-integrated; validated |
+| 05R0 | per release | Select strict rescue targets: baseline-uncovered and k=7 searchable | 05B, 01, 02B | production-integrated; validated |
+| 05R1 | per release | Strict FULL-V2 sequence rescue using exactly Stage 03 algorithm/thresholds | 05R0, 04D0b, 01A_FULL | production-integrated; validated |
+| 05A2 | common | Final candidate union including strict FULL-V2 rescue | 05A, START+END 05R1 | production-integrated; validated |
+| 05C2 | common | Final taxonomy audit channel based on final candidate union | 05A2, START+END 04B | production-integrated; validated |
+| 05R_POST | common | Explicit post-rescue unresolved-target report | 05B, 05R0, 05R1, 05A2, 05C2, taxonomy/anchor contexts | production-integrated; validated |
+| 05D | per release | Materialize candidate sequences from FULL V2 for primary and permitted audit rows | 05A2, 05C2, 01A_FULL | production-integrated; validated |
+| 06A | common | Build canonical alignment job table | 01, 05A2, 05C2, START+END 05D | production-integrated; validated |
+| NONEXACT | common | Select non-exact jobs requiring dynamic programming | 06A | production-integrated; validated |
+| 06C0 | common | Compute exact affine FULL-DP directional glocal alignments for NONEXACT jobs | NONEXACT, 01, START+END 05D | production-integrated; validated |
+| 06C1 | common | Combine synthesized exact results and 06C0 non-exact results into canonical pre-resolver output | 06A, 06C0 | production-integrated; validated |
 
 ---
 
