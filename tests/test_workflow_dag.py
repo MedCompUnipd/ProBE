@@ -266,3 +266,25 @@ def test_stage_04c_implementation_input_is_declared():
 
     assert "DIRECT_LINEAGE_KEYS_SCRIPT" in text
     assert '"04_compile_direct_lineage_keys.py"' in text
+
+
+def test_stage_04d0a_reuses_production_raw_ox_extractor():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04D0a:")
+    end = text.index("rule stage_04D0b:", start)
+    block = text[start:end]
+
+    assert 'source_manifest=bundle("01A_FULL", "{role}")' in block
+    assert "binary=RAW_OX_EXTRACT_BINARY" in block
+    assert 'stage="04D0a"' in block
+    assert '"scripts/run_stage_04D0a.py"' in block
+
+    assert 'bundle("01C"' not in block
+    assert 'bundle("02A"' not in block
+    assert 'bundle("03"' not in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block

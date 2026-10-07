@@ -485,24 +485,22 @@ rule stage_04C:
 
 rule stage_04D0a:
     input:
-        bundle("01A_FULL", "{role}")
+        source_manifest=bundle("01A_FULL", "{role}"),
+        binary=RAW_OX_EXTRACT_BINARY
     output:
         bundle("04D0a", "{role}")
     log:
         stage_log("04D0a", "{role}")
     params:
-        stage="04D0a",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="04D0a"
     threads:
         cfg.resources("04D0a")["threads"]
     resources:
         mem_mb=cfg.resources("04D0a")["mem_mb"],
         runtime=cfg.resources("04D0a")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04D0a.py"
+
 
 rule stage_04D0b:
     input:
