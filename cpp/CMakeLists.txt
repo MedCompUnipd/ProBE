@@ -36,3 +36,8 @@ add_executable(
     probe-primary-candidate-scan-v1
     src/probe_primary_candidate_scan_v1.cpp
 )
+
+add_executable(
+    probe-direct-accession-anchors-v1
+    src/probe_direct_accession_anchors_v1.cpp
+)

@@ -42,3 +42,5 @@ build-raw-ox-extract = "cmake -S cpp -B .pixi/build/probe-raw-ox-extract -G Ninj
 raw-ox-extract-v1 = ".pixi/build/probe-raw-ox-extract/probe-raw-ox-extract-v1"
 build-primary-candidate-scan = "cmake -S cpp -B .pixi/build/probe-primary-candidate-scan -G Ninja && cmake --build .pixi/build/probe-primary-candidate-scan --target probe-primary-candidate-scan-v1"
 primary-candidate-scan-v1 = ".pixi/build/probe-primary-candidate-scan/probe-primary-candidate-scan-v1"
+build-direct-accession-anchors = "cmake -S cpp -B .pixi/build/probe-direct-accession-anchors -G Ninja && cmake --build .pixi/build/probe-direct-accession-anchors --target probe-direct-accession-anchors-v1"
+direct-accession-anchors-v1 = ".pixi/build/probe-direct-accession-anchors/probe-direct-accession-anchors-v1"

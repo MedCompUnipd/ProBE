@@ -169,3 +169,41 @@ def test_stage03_native_build_rule_is_declared():
 
     assert "rule build_primary_candidate_scan:" in text
     assert "pixi run build-primary-candidate-scan" in text
+
+
+def test_stage_04a_is_production_wired():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04A:")
+    end = text.index("rule stage_04B:", start)
+    block = text[start:end]
+
+    assert 'target_manifest=bundle("01")' in block
+    assert 'full_manifest=bundle("01A_FULL", "{role}")' in block
+    assert "binary=DIRECT_ACCESSION_ANCHORS_BINARY" in block
+    assert 'stage="04A"' in block
+    assert 'script:\n        "scripts/run_stage_04A.py"' in block
+
+    assert 'cfg.data["scientific"]' not in block
+    assert 'cfg.data["ontology"]' not in block
+    assert "release_config" not in block
+    assert "target_contract" not in block
+
+
+def test_direct_accession_anchor_build_is_declared():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    assert "DIRECT_ACCESSION_ANCHORS_BINARY" in text
+    assert "DIRECT_ACCESSION_ANCHORS_BUILD_INPUTS" in text
+    assert "rule build_direct_accession_anchors:" in text
+    assert "pixi run build-direct-accession-anchors" in text
+    assert '"probe_direct_accession_anchors_v1.cpp"' in text
+
+
+def test_stage_04a_declares_no_ontology_provenance():
+    runner = (
+        ROOT / "workflow" / "scripts" / "run_stage_04A.py"
+    ).read_text(encoding="utf-8")
+
+    assert "ontology=None" in runner
+    assert "ontology={}" not in runner

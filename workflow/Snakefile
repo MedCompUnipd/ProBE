@@ -29,6 +29,25 @@ PRIMARY_CANDIDATE_SCAN_BUILD_INPUTS = [
     str(PROJECT_ROOT / "pixi.toml"),
     str(PROJECT_ROOT / "pixi.lock"),
 ]
+
+DIRECT_ACCESSION_ANCHORS_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-direct-accession-anchors"
+    / "probe-direct-accession-anchors-v1"
+)
+DIRECT_ACCESSION_ANCHORS_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
+    str(
+        PROJECT_ROOT
+        / "cpp"
+        / "src"
+        / "probe_direct_accession_anchors_v1.cpp"
+    ),
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+]
 RELEASE_FASTA_BINARY = str(
     PROJECT_ROOT
     / ".pixi"
@@ -380,27 +399,38 @@ rule stage_03:
     script:
         "scripts/run_stage_03.py"
 
+rule build_direct_accession_anchors:
+    input:
+        DIRECT_ACCESSION_ANCHORS_BUILD_INPUTS
+    output:
+        DIRECT_ACCESSION_ANCHORS_BINARY
+    log:
+        stage_log("build-direct-accession-anchors")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && "
+        "pixi run build-direct-accession-anchors > {log:q} 2>&1"
+
+
 rule stage_04A:
     input:
-        bundle("01"),
-        bundle("01A_FULL", "{role}")
+        target_manifest=bundle("01"),
+        full_manifest=bundle("01A_FULL", "{role}"),
+        binary=DIRECT_ACCESSION_ANCHORS_BINARY
     output:
         bundle("04A", "{role}")
     log:
         stage_log("04A", "{role}")
     params:
-        stage="04A",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="04A"
     threads:
         cfg.resources("04A")["threads"]
     resources:
         mem_mb=cfg.resources("04A")["mem_mb"],
         runtime=cfg.resources("04A")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04A.py"
 
 rule stage_04B:
     input:
