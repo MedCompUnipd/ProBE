@@ -147,6 +147,14 @@ LINEAGE_EVIDENCE_COLLAPSE_SCRIPT = str(
     / "04E_collapse_lineage_evidence.py"
 )
 
+
+CANDIDATE_CHANNEL_UNION_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "05A_union_candidate_channels.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -648,25 +656,25 @@ rule stage_04E:
 
 rule stage_05A:
     input:
-        both("03"),
-        both("04E")
+        start_sequence_manifest=bundle("03", "START"),
+        end_sequence_manifest=bundle("03", "END"),
+        start_lineage_manifest=bundle("04E", "START"),
+        end_lineage_manifest=bundle("04E", "END"),
+        implementation_script=CANDIDATE_CHANNEL_UNION_SCRIPT
     output:
         bundle("05A")
     log:
         stage_log("05A")
     params:
-        stage="05A",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="05A"
     threads:
         cfg.resources("05A")["threads"]
     resources:
         mem_mb=cfg.resources("05A")["mem_mb"],
         runtime=cfg.resources("05A")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05A.py"
+
 
 rule stage_05B:
     input:

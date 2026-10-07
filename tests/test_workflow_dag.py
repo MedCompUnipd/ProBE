@@ -399,3 +399,57 @@ def test_stage_04e_collapses_onehop_lineage_evidence_without_filtering():
     assert 'ontology=cfg.data["ontology"]' not in block
     assert "release_config=" not in block
     assert "target_contract=" not in block
+
+
+def test_stage_05a_unions_sequence_and_lineage_channels_without_filtering():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_05A:")
+    rest = text[start:]
+    next_rule = rest.index("\nrule ", len("rule stage_05A:"))
+    block = rest[:next_rule]
+
+    assert 'start_sequence_manifest=bundle("03", "START")' in block
+    assert 'end_sequence_manifest=bundle("03", "END")' in block
+    assert 'start_lineage_manifest=bundle("04E", "START")' in block
+    assert 'end_lineage_manifest=bundle("04E", "END")' in block
+
+    assert "implementation_script=CANDIDATE_CHANNEL_UNION_SCRIPT" in block
+    assert 'bundle("05A")' in block
+    assert 'stage="05A"' in block
+    assert '"scripts/run_stage_05A.py"' in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_05a_keeps_tunable_k_generic():
+    repo_root = SNAKEFILE.parent.parent
+
+    pipeline_script = (
+        repo_root
+        / "scripts"
+        / "pipeline"
+        / "05A_union_candidate_channels.py"
+    ).read_text(encoding="utf-8")
+
+    runner = (
+        repo_root
+        / "workflow"
+        / "scripts"
+        / "run_stage_05A.py"
+    ).read_text(encoding="utf-8")
+
+    assert "target_distinct_kmers" in pipeline_script
+    assert "shared_distinct_kmers" in pipeline_script
+    assert "shared_unique_positional_kmers" in pipeline_script
+
+    assert "target_distinct_7mers" not in pipeline_script
+    assert "shared_distinct_7mers" not in pipeline_script
+    assert "shared_unique_positional_7mers" not in pipeline_script
+
+    assert "k != 7" not in runner
+    assert "k == 7" not in runner
+    assert 'cfg.data["scientific"]' not in runner
