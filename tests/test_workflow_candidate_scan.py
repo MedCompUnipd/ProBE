@@ -187,3 +187,40 @@ def test_preflight_does_not_treat_sequence_shorter_than_k_as_ineligible(
     assert result.eligible_target_count == 1
     assert result.unresolved_target_count == 0
     assert result.empty_primary_bucket_count == 0
+
+
+def test_read_candidate_scan_summary(tmp_path):
+    from probe.workflow.candidate_scan import read_candidate_scan_summary
+
+    path = write(
+        tmp_path / "summary.tsv",
+        "metric\tvalue\nsnapshot\tTEST\ntargets_loaded\t3\npairs_emitted\t7\n",
+    )
+
+    result = read_candidate_scan_summary(path)
+
+    assert result.targets_loaded == 3
+    assert result.pairs_emitted == 7
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        "wrong\theader\n",
+        "metric\tvalue\ntargets_loaded\t1\n",
+        ("metric\tvalue\ntargets_loaded\t1\ntargets_loaded\t2\npairs_emitted\t0\n"),
+        "metric\tvalue\ntargets_loaded\tx\npairs_emitted\t0\n",
+        "metric\tvalue\ntargets_loaded\t1\npairs_emitted\t-1\n",
+    ],
+)
+def test_read_candidate_scan_summary_rejects_invalid_summary(
+    tmp_path,
+    text,
+):
+    from probe.workflow.candidate_scan import read_candidate_scan_summary
+
+    path = write(tmp_path / "summary.tsv", text)
+
+    with pytest.raises(ValueError):
+        read_candidate_scan_summary(path)

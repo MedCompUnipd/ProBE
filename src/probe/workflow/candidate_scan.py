@@ -96,6 +96,12 @@ class CandidateScanPreflight:
     empty_primary_bucket_count: int
 
 
+@dataclass(frozen=True)
+class CandidateScanSummary:
+    targets_loaded: int
+    pairs_emitted: int
+
+
 def _load_unique_rows(
     path: Path,
     *,
@@ -196,6 +202,62 @@ def preflight_candidate_scan(
         eligible_target_count=eligible,
         unresolved_target_count=unresolved,
         empty_primary_bucket_count=empty_primary_bucket,
+    )
+
+
+def read_candidate_scan_summary(path: Path) -> CandidateScanSummary:
+    """Read scanner counts needed for workflow outcome classification."""
+
+    with path.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.reader(handle, delimiter="\t")
+
+        try:
+            header = next(reader)
+        except StopIteration as error:
+            raise ValueError(f"{path}: empty candidate scan summary") from error
+
+        if header != ["metric", "value"]:
+            raise ValueError(
+                f"{path}: expected summary header ['metric', 'value'], got {header}"
+            )
+
+        metrics: dict[str, str] = {}
+
+        for line_number, row in enumerate(reader, start=2):
+            if len(row) != 2:
+                raise ValueError(f"{path}: malformed summary row at line {line_number}")
+
+            key, value = row
+
+            if not key:
+                raise ValueError(f"{path}: empty summary metric at line {line_number}")
+
+            if key in metrics:
+                raise ValueError(f"{path}: duplicate summary metric {key}")
+
+            metrics[key] = value
+
+    counts: dict[str, int] = {}
+
+    for key in ("targets_loaded", "pairs_emitted"):
+        if key not in metrics:
+            raise ValueError(f"{path}: missing summary metric {key}")
+
+        try:
+            value = int(metrics[key])
+        except ValueError as error:
+            raise ValueError(
+                f"{path}: summary metric {key} is not an integer"
+            ) from error
+
+        if value < 0:
+            raise ValueError(f"{path}: summary metric {key} must be nonnegative")
+
+        counts[key] = value
+
+    return CandidateScanSummary(
+        targets_loaded=counts["targets_loaded"],
+        pairs_emitted=counts["pairs_emitted"],
     )
 
 
