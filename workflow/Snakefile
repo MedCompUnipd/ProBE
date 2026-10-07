@@ -747,26 +747,24 @@ rule stage_05R0:
 
 rule stage_05R1:
     input:
-        bundle("05R0", "{role}"),
-        bundle("04D0b", "{role}"),
-        bundle("01A_FULL", "{role}")
+        rescue_manifest=bundle("05R0", "{role}"),
+        full_taxonomy_manifest=bundle("04D0b", "{role}"),
+        full_v2_manifest=bundle("01A_FULL", "{role}"),
+        binary=PRIMARY_CANDIDATE_SCAN_BINARY
     output:
         bundle("05R1", "{role}")
     log:
         stage_log("05R1", "{role}")
     params:
         stage="05R1",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        candidate_policy=cfg.stage03_parameters()
     threads:
         cfg.resources("05R1")["threads"]
     resources:
         mem_mb=cfg.resources("05R1")["mem_mb"],
         runtime=cfg.resources("05R1")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05R1.py"
 
 rule stage_05A2:
     input:

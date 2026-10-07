@@ -560,3 +560,57 @@ def test_stage_05r0_consumes_searchability_fact_without_rereading_k():
 
     assert 'cfg.data["scientific"]' not in runner
     assert 'policy["k"]' not in runner
+
+
+def test_stage_05r1_reuses_stage03_scanner_on_full_v2():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_05R1:")
+    rest = text[start:]
+    next_rule = rest.index("\nrule ", len("rule stage_05R1:"))
+    block = rest[:next_rule]
+
+    assert 'rescue_manifest=bundle("05R0", "{role}")' in block
+    assert 'full_taxonomy_manifest=bundle("04D0b", "{role}")' in block
+    assert 'full_v2_manifest=bundle("01A_FULL", "{role}")' in block
+    assert "binary=PRIMARY_CANDIDATE_SCAN_BINARY" in block
+
+    assert 'bundle("05R1", "{role}")' in block
+    assert 'stage="05R1"' in block
+    assert "candidate_policy=cfg.stage03_parameters()" in block
+    assert '"scripts/run_stage_05R1.py"' in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_05r1_uses_all_tunable_stage03_parameters():
+    repo_root = SNAKEFILE.parent.parent
+
+    runner = (
+        repo_root
+        / "workflow"
+        / "scripts"
+        / "run_stage_05R1.py"
+    ).read_text(encoding="utf-8")
+
+    for key in (
+        "k",
+        "max_required_shared",
+        "min_target_kmer_fraction",
+        "fragment_policy",
+        "taxonomy_policy",
+    ):
+        assert f'policy["{key}"]' in runner
+
+    assert '"candidate_universe": "FULL_V2"' in runner
+    assert '"rescue_algorithm": "SAME_AS_STAGE_03"' in runner
+    assert "PRIMARY_CANDIDATE_SCAN_BINARY" in SNAKEFILE.read_text(
+        encoding="utf-8"
+    )
+
+    assert "k == 7" not in runner
+    assert "k != 7" not in runner
+    assert "k7" not in runner.lower()
