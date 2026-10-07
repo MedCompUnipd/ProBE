@@ -1,8 +1,15 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from probe.workflow.artifacts import atomic_stage_bundle, validate_bundle
+from probe.workflow.lineage_scan import (
+    preflight_lineage_scan_index,
+    read_lineage_scan_summary,
+    write_empty_lineage_scan_outputs,
+)
+from probe.workflow.outcome import write_stage_outcome
 from probe.workflow.runtime import input_artifact, runtime_environment
 
 context = globals()["snakemake"]
@@ -25,19 +32,14 @@ taxonomy_manifest = validate_bundle(taxonomy_bundle, deep=False)
 full_manifest = validate_bundle(full_bundle, deep=False)
 
 if index_manifest.stage != "04D1":
-    raise ValueError(
-        f"04D2 expected upstream stage 04D1, got {index_manifest.stage}"
-    )
+    raise ValueError(f"04D2 expected upstream stage 04D1, got {index_manifest.stage}")
 
 if index_manifest.role is not None:
-    raise ValueError(
-        f"04D2 expected common 04D1, got role {index_manifest.role}"
-    )
+    raise ValueError(f"04D2 expected common 04D1, got role {index_manifest.role}")
 
 if index_manifest.release_id is not None:
     raise ValueError(
-        "04D2 expected common 04D1 release_id=None, "
-        f"got {index_manifest.release_id}"
+        f"04D2 expected common 04D1 release_id=None, got {index_manifest.release_id}"
     )
 
 if taxonomy_manifest.stage != "04D0b":
@@ -47,8 +49,7 @@ if taxonomy_manifest.stage != "04D0b":
 
 if taxonomy_manifest.role != role:
     raise ValueError(
-        "04D2 taxonomy role mismatch: "
-        f"expected {role}, got {taxonomy_manifest.role}"
+        f"04D2 taxonomy role mismatch: expected {role}, got {taxonomy_manifest.role}"
     )
 
 if full_manifest.stage != "01A_FULL":
@@ -75,10 +76,15 @@ if taxonomy_manifest.release_id != release_id:
 index_data = json.loads(index_manifest_path.read_text(encoding="utf-8"))
 index_parameters = index_data.get("parameters", {})
 
-indexed_releases = {
-    index_parameters.get("start_release_id"),
-    index_parameters.get("end_release_id"),
-}
+start_release_id = index_parameters.get("start_release_id")
+end_release_id = index_parameters.get("end_release_id")
+
+if not start_release_id or not end_release_id:
+    raise ValueError(
+        "04D2 requires 04D1 start_release_id and end_release_id parameters"
+    )
+
+indexed_releases = {start_release_id, end_release_id}
 
 if release_id not in indexed_releases:
     raise ValueError(
@@ -105,8 +111,15 @@ scan_index = index_bundle / index_name
 ox_taxonomy = taxonomy_bundle / taxonomy_name
 fasta = full_bundle / fasta_name
 
+preflight = preflight_lineage_scan_index(
+    scan_index,
+    release=release_id,
+    allowed_releases=indexed_releases,
+)
+
 output_name = "04D2_lineage_evidence.tsv"
 summary_name = "04D2_summary.tsv"
+outcome_name = "stage_outcome.json"
 progress_every = 10_000_000
 
 binary_artifact = input_artifact(binary)
@@ -133,6 +146,7 @@ parameters = {
     "release_id": release_id,
     "progress_every": progress_every,
     "command": recorded_command,
+    "command_executed": preflight.posting_count > 0,
 }
 
 implementation = {
@@ -153,47 +167,132 @@ inputs = (
 expected_outputs = {
     output_name,
     summary_name,
+    outcome_name,
 }
 
 log_path = Path(context.log[0])
 log_path.parent.mkdir(parents=True, exist_ok=True)
 
-with log_path.open("w", encoding="utf-8") as log, atomic_stage_bundle(
-    destination,
-    stage="04D2",
-    role=role,
-    release_id=release_id,
-    parameters=parameters,
-    ontology=None,
-    implementation=implementation,
-    inputs=inputs,
-    environment=runtime_environment(),
-    allow_invalidated_destination=True,
-) as staging:
-    command = [
-        str(binary),
-        "--release",
-        release_id,
-        "--scan-index",
-        str(scan_index),
-        "--ox-taxonomy",
-        str(ox_taxonomy),
-        "--fasta",
-        str(fasta),
-        "--output",
-        str(staging / output_name),
-        "--summary",
-        str(staging / summary_name),
-        "--progress-every",
-        str(progress_every),
-    ]
+with (
+    log_path.open("w", encoding="utf-8") as log,
+    atomic_stage_bundle(
+        destination,
+        stage="04D2",
+        role=role,
+        release_id=release_id,
+        parameters=parameters,
+        ontology=None,
+        implementation=implementation,
+        inputs=inputs,
+        environment=runtime_environment(),
+        allow_invalidated_destination=True,
+    ) as staging,
+):
+    output_path = staging / output_name
+    summary_path = staging / summary_name
+    outcome_path = staging / outcome_name
 
-    subprocess.run(
-        command,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        check=True,
-    )
+    outcome_counts = {
+        "scan_index_postings": preflight.posting_count,
+        "evidence_rows": 0,
+    }
+
+    if preflight.posting_count == 0:
+        write_empty_lineage_scan_outputs(
+            output_path,
+            summary_path,
+            release=release_id,
+        )
+
+        write_stage_outcome(
+            outcome_path,
+            state="SKIPPED_NO_ELIGIBLE_TARGETS",
+            reason_code="NO_LINEAGE_SCAN_POSTINGS",
+            message=(
+                "No frozen lineage-key postings have a usable taxonomy "
+                "bucket for this release. The one-hop lineage scan was "
+                "not required."
+            ),
+            counts=outcome_counts,
+        )
+
+        warning = (
+            f"WARNING [04D2 {role}]: zero eligible lineage scan postings; "
+            "one-hop scanner skipped as a valid empty outcome."
+        )
+        print(warning, file=log)
+        print(warning, file=sys.stderr)
+
+    else:
+        command = [
+            str(binary),
+            "--release",
+            release_id,
+            "--scan-index",
+            str(scan_index),
+            "--ox-taxonomy",
+            str(ox_taxonomy),
+            "--fasta",
+            str(fasta),
+            "--output",
+            str(output_path),
+            "--summary",
+            str(summary_path),
+            "--progress-every",
+            str(progress_every),
+        ]
+
+        subprocess.run(
+            command,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+
+        scan_summary = read_lineage_scan_summary(
+            summary_path,
+            expected_release=release_id,
+        )
+
+        if scan_summary.postings_loaded != preflight.posting_count:
+            raise RuntimeError(
+                "04D2 preflight/scanner posting-count mismatch: "
+                f"preflight={preflight.posting_count} "
+                f"scanner={scan_summary.postings_loaded}"
+            )
+
+        outcome_counts["evidence_rows"] = scan_summary.evidence_rows
+
+        if scan_summary.evidence_rows == 0:
+            write_stage_outcome(
+                outcome_path,
+                state="EMPTY_RESULT",
+                reason_code="NO_LINEAGE_EVIDENCE",
+                message=(
+                    "The one-hop lineage scan completed successfully "
+                    "but emitted no lineage evidence."
+                ),
+                counts=outcome_counts,
+            )
+
+            warning = (
+                f"WARNING [04D2 {role}]: one-hop lineage scan completed "
+                "successfully but emitted zero evidence rows."
+            )
+            print(warning, file=log)
+            print(warning, file=sys.stderr)
+
+        else:
+            write_stage_outcome(
+                outcome_path,
+                state="COMPLETED",
+                reason_code="LINEAGE_EVIDENCE_EMITTED",
+                message=(
+                    "The one-hop lineage scan completed successfully "
+                    "and emitted lineage evidence."
+                ),
+                counts=outcome_counts,
+            )
 
     produced = {
         path.relative_to(staging).as_posix()

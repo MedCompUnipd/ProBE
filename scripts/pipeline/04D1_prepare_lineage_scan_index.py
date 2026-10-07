@@ -255,15 +255,19 @@ def main() -> int:
     ]
 
     multiplicity: Counter[tuple[str, str, str, str]] = Counter()
+    missing_bucket_key_counts: Counter[str] = Counter()
+    missing_bucket_targets: defaultdict[str, set[str]] = defaultdict(set)
+
     for row in key_rows:
         tid = row["target_id"]
         for release, buckets in releases:
             bucket = buckets[tid]
             if not bucket:
-                raise ValueError(f"empty primary bucket for target {tid}")
-            multiplicity[
-                (release, bucket, row["key_type"], row["key_value"])
-            ] += 1
+                missing_bucket_key_counts[release] += 1
+                missing_bucket_targets[release].add(tid)
+                continue
+
+            multiplicity[(release, bucket, row["key_type"], row["key_value"])] += 1
 
     output_rows: list[dict[str, str | int]] = []
     collision_group_counts: Counter[tuple[str, str]] = Counter()
@@ -278,6 +282,9 @@ def main() -> int:
 
         for release, buckets in releases:
             primary_bucket = buckets[tid]
+            if not primary_bucket:
+                continue
+
             group = (
                 release,
                 primary_bucket,
@@ -338,26 +345,38 @@ def main() -> int:
         writer.writeheader()
         writer.writerows(output_rows)
 
-    bucket_changes = sum(
-        start_buckets[tid] != end_buckets[tid] for tid in targets
-    )
+    bucket_changes = sum(start_buckets[tid] != end_buckets[tid] for tid in targets)
 
     per_release: dict[str, dict[str, object]] = {}
     for release, _buckets in releases:
         by_type = {}
         for key_type in ("ACCESSION", "ORDERED_LOCUS", "ORF"):
             by_type[key_type] = {
-                "collision_group_count":
-                    collision_group_counts[(release, key_type)],
-                "max_targets_per_key_within_bucket":
-                    max_multiplicity[(release, key_type)],
+                "collision_group_count": collision_group_counts[(release, key_type)],
+                "max_targets_per_key_within_bucket": max_multiplicity[
+                    (release, key_type)
+                ],
             }
         per_release[release] = by_type
+
+    scan_index_rows_by_release = Counter(str(row["release"]) for row in output_rows)
 
     summary = {
         "stage": "04D1",
         "frozen_target_key_count": len(key_rows),
         "scan_index_row_count": len(output_rows),
+        "scan_index_row_count_by_release": {
+            release: scan_index_rows_by_release[release]
+            for release, _buckets in releases
+        },
+        "frozen_keys_without_candidate_bucket_by_release": {
+            release: missing_bucket_key_counts[release]
+            for release, _buckets in releases
+        },
+        "targets_without_candidate_bucket_by_release": {
+            release: len(missing_bucket_targets[release])
+            for release, _buckets in releases
+        },
         "eligible_anchor_rows_used_for_provenance": {
             args.start_release_id: start_eligible,
             args.end_release_id: end_eligible,
