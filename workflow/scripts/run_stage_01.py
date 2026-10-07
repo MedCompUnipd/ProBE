@@ -7,6 +7,7 @@ from probe.target_preparation import (
     prepare_targets,
 )
 from probe.workflow.artifacts import atomic_stage_bundle
+from probe.workflow.outcome import write_stage_outcome
 from probe.workflow.runtime import input_artifact, runtime_environment
 
 context = globals()["snakemake"]
@@ -77,6 +78,34 @@ with log_path.open("w", encoding="utf-8") as log:
 
             log.write(f"accepted_targets\t{result.accepted_count}\n")
             log.write(f"rejected_targets\t{result.rejected_count}\n")
+
+            outcome_counts = {
+                "accepted_targets": result.accepted_count,
+                "rejected_targets": result.rejected_count,
+            }
+
+            if result.accepted_count == 0:
+                write_stage_outcome(
+                    staging / "stage_outcome.json",
+                    state="EMPTY_RESULT",
+                    reason_code="NO_ACCEPTED_TARGETS",
+                    message=(
+                        "Canonical target preparation completed successfully "
+                        "but no targets satisfied the target contract."
+                    ),
+                    counts=outcome_counts,
+                )
+            else:
+                write_stage_outcome(
+                    staging / "stage_outcome.json",
+                    state="COMPLETED",
+                    reason_code="TARGETS_ACCEPTED",
+                    message=(
+                        "Canonical target preparation completed successfully "
+                        "and accepted targets for downstream processing."
+                    ),
+                    counts=outcome_counts,
+                )
     except Exception as error:
         log.write(f"FAILED\t{type(error).__name__}: {error}\n")
         raise
