@@ -110,6 +110,14 @@ FULL_OX_TAXONOMY_SCRIPT = str(
     / "04D0_prepare_full_ox_taxonomy.py"
 )
 
+
+LINEAGE_SCAN_INDEX_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "04D1_prepare_lineage_scan_index.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -533,27 +541,27 @@ rule stage_04D0b:
 
 rule stage_04D1:
     input:
-        bundle("01"),
-        bundle("04C"),
-        both("04B"),
-        both("02B")
+        target_manifest=bundle("01"),
+        keys_manifest=bundle("04C"),
+        start_anchor_manifest=bundle("04B", "START"),
+        end_anchor_manifest=bundle("04B", "END"),
+        start_taxonomy_manifest=bundle("02B", "START"),
+        end_taxonomy_manifest=bundle("02B", "END"),
+        implementation_script=LINEAGE_SCAN_INDEX_SCRIPT
     output:
         bundle("04D1")
     log:
         stage_log("04D1")
     params:
-        stage="04D1",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="04D1"
     threads:
         cfg.resources("04D1")["threads"]
     resources:
         mem_mb=cfg.resources("04D1")["mem_mb"],
         runtime=cfg.resources("04D1")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04D1.py"
+
 
 rule stage_04D2:
     input:

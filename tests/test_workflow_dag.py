@@ -317,3 +317,30 @@ def test_stage_04d0b_resolves_full_ox_with_release_taxonomy_index():
     assert 'ontology=cfg.data["ontology"]' not in block
     assert "release_config=" not in block
     assert "target_contract=" not in block
+
+
+def test_stage_04d1_builds_common_frozen_lineage_scan_index():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04D1:")
+    end = text.index("rule stage_04D2:", start)
+    block = text[start:end]
+
+    assert 'target_manifest=bundle("01")' in block
+    assert 'keys_manifest=bundle("04C")' in block
+    assert 'start_anchor_manifest=bundle("04B", "START")' in block
+    assert 'end_anchor_manifest=bundle("04B", "END")' in block
+    assert 'start_taxonomy_manifest=bundle("02B", "START")' in block
+    assert 'end_taxonomy_manifest=bundle("02B", "END")' in block
+    assert "implementation_script=LINEAGE_SCAN_INDEX_SCRIPT" in block
+    assert 'stage="04D1"' in block
+    assert '"scripts/run_stage_04D1.py"' in block
+
+    assert 'bundle("03"' not in block
+    assert 'bundle("04D0a"' not in block
+    assert 'bundle("04D0b"' not in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
