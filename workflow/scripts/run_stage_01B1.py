@@ -1,7 +1,9 @@
+import json
 import subprocess
 from pathlib import Path
 
 from probe.workflow.artifacts import atomic_stage_bundle, validate_bundle
+from probe.workflow.outcome import write_stage_outcome
 from probe.workflow.runtime import input_artifact, runtime_environment
 
 context = globals()["snakemake"]
@@ -35,9 +37,7 @@ if release_manifest.release_id is None:
     raise ValueError("01B1 requires an upstream release_id")
 
 if policy_manifest.stage != "01B0":
-    raise ValueError(
-        f"01B1 expected upstream stage 01B0, got {policy_manifest.stage}"
-    )
+    raise ValueError(f"01B1 expected upstream stage 01B0, got {policy_manifest.stage}")
 
 if policy_manifest.role is not None:
     raise ValueError("01B0 must be a common ontology-policy bundle")
@@ -105,23 +105,27 @@ expected_outputs = {
     "goa.missing_accessions.txt",
     "goa.discard_reason_counts.tsv",
     "goa.stats.json",
+    "stage_outcome.json",
 }
 
 log_path = Path(context.log[0])
 log_path.parent.mkdir(parents=True, exist_ok=True)
 
-with log_path.open("w", encoding="utf-8") as log, atomic_stage_bundle(
-    destination,
-    stage="01B1",
-    role=role,
-    release_id=release_manifest.release_id,
-    parameters=parameters,
-    ontology=policy_manifest.ontology,
-    implementation=implementation,
-    inputs=inputs,
-    environment=runtime_environment(),
-    allow_invalidated_destination=True,
-) as staging:
+with (
+    log_path.open("w", encoding="utf-8") as log,
+    atomic_stage_bundle(
+        destination,
+        stage="01B1",
+        role=role,
+        release_id=release_manifest.release_id,
+        parameters=parameters,
+        ontology=policy_manifest.ontology,
+        implementation=implementation,
+        inputs=inputs,
+        environment=runtime_environment(),
+        allow_invalidated_destination=True,
+    ) as staging,
+):
     command = [
         str(binary),
         "--policy",
@@ -142,6 +146,46 @@ with log_path.open("w", encoding="utf-8") as log, atomic_stage_bundle(
         stderr=subprocess.STDOUT,
         check=True,
     )
+
+    stats_path = staging / "goa.stats.json"
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+
+    positive_accession_count = stats.get("positive_accession_count")
+    if (
+        isinstance(positive_accession_count, bool)
+        or not isinstance(positive_accession_count, int)
+        or positive_accession_count < 0
+    ):
+        raise ValueError("01B1 summary has invalid positive_accession_count")
+
+    outcome_counts = {
+        "positive_accessions": positive_accession_count,
+    }
+
+    if positive_accession_count == 0:
+        write_stage_outcome(
+            staging / "stage_outcome.json",
+            state="EMPTY_RESULT",
+            reason_code="NO_POSITIVE_GOA_ACCESSIONS",
+            message=(
+                "GOA normalization completed successfully but produced "
+                "no positive accessions for the GO-positive search universe."
+            ),
+            counts=outcome_counts,
+        )
+    else:
+        write_stage_outcome(
+            staging / "stage_outcome.json",
+            state="COMPLETED",
+            reason_code="POSITIVE_GOA_ACCESSIONS_RETAINED",
+            message=(
+                "GOA normalization completed successfully and retained "
+                "positive accessions for the GO-positive search universe."
+            ),
+            counts=outcome_counts,
+        )
+
+    log.write(f"positive_accessions\\t{positive_accession_count}\\n")
 
     produced = {
         path.relative_to(staging).as_posix()
