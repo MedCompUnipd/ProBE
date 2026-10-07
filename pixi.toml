@@ -44,5 +44,7 @@ build-primary-candidate-scan = "cmake -S cpp -B .pixi/build/probe-primary-candid
 primary-candidate-scan-v1 = ".pixi/build/probe-primary-candidate-scan/probe-primary-candidate-scan-v1"
 build-direct-accession-anchors = "cmake -S cpp -B .pixi/build/probe-direct-accession-anchors -G Ninja && cmake --build .pixi/build/probe-direct-accession-anchors --target probe-direct-accession-anchors-v1"
 direct-accession-anchors-v1 = ".pixi/build/probe-direct-accession-anchors/probe-direct-accession-anchors-v1"
+build-candidate-sequence-extract = "cmake -S cpp -B .pixi/build/probe-candidate-sequence-extract -G Ninja && cmake --build .pixi/build/probe-candidate-sequence-extract --target probe-candidate-sequence-extract-v1"
+candidate-sequence-extract-v1 = ".pixi/build/probe-candidate-sequence-extract/probe-candidate-sequence-extract-v1"
 build-onehop-lineage-scan = "cmake -S cpp -B .pixi/build/probe-onehop-lineage-scan -G Ninja && cmake --build .pixi/build/probe-onehop-lineage-scan --target probe-onehop-lineage-scan-v1"
 onehop-lineage-scan-v1 = ".pixi/build/probe-onehop-lineage-scan/probe-onehop-lineage-scan-v1"

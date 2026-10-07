@@ -77,6 +77,25 @@ ONEHOP_LINEAGE_SCAN_BUILD_INPUTS = [
 ]
 
 
+CANDIDATE_SEQUENCE_EXTRACT_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-candidate-sequence-extract"
+    / "probe-candidate-sequence-extract-v1"
+)
+CANDIDATE_SEQUENCE_EXTRACT_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
+    str(
+        PROJECT_ROOT
+        / "cpp"
+        / "src"
+        / "probe_candidate_sequence_extract_v1.cpp"
+    ),
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+]
+
 RELEASE_FASTA_BINARY = str(
     PROJECT_ROOT
     / ".pixi"
@@ -856,28 +875,40 @@ rule stage_05R_POST:
         "scripts/run_stage_05R_POST.py"
 
 
+rule build_candidate_sequence_extract:
+    input:
+        CANDIDATE_SEQUENCE_EXTRACT_BUILD_INPUTS
+    output:
+        CANDIDATE_SEQUENCE_EXTRACT_BINARY
+    log:
+        stage_log("build-candidate-sequence-extract")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && "
+        "pixi run build-candidate-sequence-extract > {log:q} 2>&1"
+
+
 rule stage_05D:
     input:
-        bundle("05A2"),
-        bundle("05C2"),
-        bundle("01A_FULL", "{role}")
+        final_union_manifest=bundle("05A2"),
+        taxonomy_audit_manifest=bundle("05C2"),
+        full_v2_manifest=bundle("01A_FULL", "{role}"),
+        binary=CANDIDATE_SEQUENCE_EXTRACT_BINARY
     output:
         bundle("05D", "{role}")
     log:
         stage_log("05D", "{role}")
     params:
-        stage="05D",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="05D"
     threads:
         cfg.resources("05D")["threads"]
     resources:
         mem_mb=cfg.resources("05D")["mem_mb"],
         runtime=cfg.resources("05D")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05D.py"
+
 
 rule stage_06A:
     input:
