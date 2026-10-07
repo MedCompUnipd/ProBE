@@ -257,7 +257,9 @@ rule build_release_fasta:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && pixi run build-release-fasta > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-release-fasta) "
+        "> {log:q} 2>&1"
 
 rule build_goa_normalize:
     input:
@@ -269,7 +271,9 @@ rule build_goa_normalize:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && pixi run build-goa-normalize > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-goa-normalize) "
+        "> {log:q} 2>&1"
 
 
 rule build_go_positive_filter:
@@ -282,7 +286,9 @@ rule build_go_positive_filter:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && pixi run build-go-positive-filter > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-go-positive-filter) "
+        "> {log:q} 2>&1"
 
 
 rule build_raw_ox_extract:
@@ -295,7 +301,9 @@ rule build_raw_ox_extract:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && pixi run build-raw-ox-extract > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-raw-ox-extract) "
+        "> {log:q} 2>&1"
 
 
 rule stage_01:
@@ -451,8 +459,9 @@ rule build_primary_candidate_scan:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && "
-        "pixi run build-primary-candidate-scan > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-primary-candidate-scan) "
+        "> {log:q} 2>&1"
 
 
 rule stage_03:
@@ -486,8 +495,9 @@ rule build_direct_accession_anchors:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && "
-        "pixi run build-direct-accession-anchors > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-direct-accession-anchors) "
+        "> {log:q} 2>&1"
 
 
 rule stage_04A:
@@ -626,8 +636,9 @@ rule build_onehop_lineage_scan:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && "
-        "pixi run build-onehop-lineage-scan > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-onehop-lineage-scan) "
+        "> {log:q} 2>&1"
 
 
 rule stage_04D2:
