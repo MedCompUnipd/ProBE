@@ -1,7 +1,14 @@
 import subprocess
+import sys
 from pathlib import Path
 
 from probe.workflow.artifacts import atomic_stage_bundle, validate_bundle
+from probe.workflow.candidate_scan import (
+    preflight_candidate_scan,
+    read_candidate_scan_summary,
+    write_empty_candidate_scan_outputs,
+)
+from probe.workflow.outcome import write_stage_outcome
 from probe.workflow.runtime import input_artifact, runtime_environment
 
 context = globals()["snakemake"]
@@ -104,6 +111,13 @@ unsearchable_name = (
     f"{output_prefix_name}.unsearchable_targets.tsv"
 )
 summary_name = f"{output_prefix_name}.summary.tsv"
+outcome_name = "stage_outcome.json"
+
+preflight = preflight_candidate_scan(
+    targets,
+    target_taxonomy,
+    taxonomy_policy=str(policy["taxonomy_policy"]),
+)
 
 binary_artifact = input_artifact(binary)
 
@@ -147,6 +161,7 @@ parameters = {
     "rescue_algorithm": "SAME_AS_STAGE_03",
     "snapshot": snapshot,
     "command": recorded_command,
+    "command_executed": preflight.eligible_target_count > 0,
 }
 
 implementation = {
@@ -168,6 +183,7 @@ expected_outputs = {
     pairs_name,
     unsearchable_name,
     summary_name,
+    outcome_name,
 }
 
 log_path = Path(context.log[0])
@@ -188,38 +204,147 @@ with log_path.open(
     environment=runtime_environment(),
     allow_invalidated_destination=True,
 ) as staging:
-    command = [
-        str(binary),
-        "--targets",
-        str(targets),
-        "--target-taxonomy",
-        str(target_taxonomy),
-        "--ox-taxonomy",
-        str(ox_taxonomy),
-        "--fasta",
-        str(fasta),
-        "--snapshot",
-        snapshot,
-        "--out-prefix",
-        str(staging / output_prefix_name),
-        "--k",
-        str(policy["k"]),
-        "--max-required-shared",
-        str(policy["max_required_shared"]),
-        "--min-target-kmer-fraction",
-        str(policy["min_target_kmer_fraction"]),
-        "--fragment-policy",
-        str(policy["fragment_policy"]),
-        "--taxonomy-policy",
-        str(policy["taxonomy_policy"]),
-    ]
+    output_prefix = staging / output_prefix_name
+    outcome_path = staging / outcome_name
 
-    subprocess.run(
-        command,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        check=True,
-    )
+    outcome_counts = {
+        "input_targets": preflight.target_count,
+        "taxonomy_rows": preflight.taxonomy_count,
+        "eligible_targets": preflight.eligible_target_count,
+        "unresolved_targets": preflight.unresolved_target_count,
+        "empty_primary_bucket_targets": preflight.empty_primary_bucket_count,
+        "output_pairs": 0,
+    }
+
+    if preflight.target_count == 0:
+        write_empty_candidate_scan_outputs(
+            output_prefix,
+            snapshot=snapshot,
+            policy=policy,
+        )
+
+        write_stage_outcome(
+            outcome_path,
+            state="SKIPPED_EMPTY_INPUT",
+            reason_code="NO_RESCUE_TARGETS",
+            message=(
+                "Stage 05R0 produced no rescue targets. "
+                "The full-V2 rescue scan was not required."
+            ),
+            counts=outcome_counts,
+        )
+
+        warning = (
+            f"WARNING [05R1 {role}]: "
+            "Stage 05R0 produced no rescue targets; full-V2 rescue scan "
+            "skipped as a valid empty outcome."
+        )
+        print(warning, file=log)
+        print(warning, file=sys.stderr)
+
+    elif preflight.eligible_target_count == 0:
+        write_empty_candidate_scan_outputs(
+            output_prefix,
+            snapshot=snapshot,
+            policy=policy,
+        )
+
+        write_stage_outcome(
+            outcome_path,
+            state="SKIPPED_NO_ELIGIBLE_TARGETS",
+            reason_code="NO_TAXONOMICALLY_ELIGIBLE_TARGETS",
+            message=(
+                "Rescue targets were present, but none satisfied the "
+                "configured taxonomy policy. "
+                "The full-V2 rescue scan was not run."
+            ),
+            counts=outcome_counts,
+        )
+
+        warning = (
+            f"WARNING [05R1 {role}]: "
+            f"{preflight.target_count} target(s) present but none are "
+            "taxonomically eligible; full-V2 rescue scan skipped "
+            "as a valid empty outcome."
+        )
+        print(warning, file=log)
+        print(warning, file=sys.stderr)
+
+    else:
+        command = [
+            str(binary),
+            "--targets",
+            str(targets),
+            "--target-taxonomy",
+            str(target_taxonomy),
+            "--ox-taxonomy",
+            str(ox_taxonomy),
+            "--fasta",
+            str(fasta),
+            "--snapshot",
+            snapshot,
+            "--out-prefix",
+            str(output_prefix),
+            "--k",
+            str(policy["k"]),
+            "--max-required-shared",
+            str(policy["max_required_shared"]),
+            "--min-target-kmer-fraction",
+            str(policy["min_target_kmer_fraction"]),
+            "--fragment-policy",
+            str(policy["fragment_policy"]),
+            "--taxonomy-policy",
+            str(policy["taxonomy_policy"]),
+        ]
+
+        subprocess.run(
+            command,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+
+        scan_summary = read_candidate_scan_summary(staging / summary_name)
+
+        if scan_summary.targets_loaded != preflight.eligible_target_count:
+            raise RuntimeError(
+                "05R1 preflight/scanner target-count mismatch: "
+                f"preflight={preflight.eligible_target_count} "
+                f"scanner={scan_summary.targets_loaded}"
+            )
+
+        outcome_counts["output_pairs"] = scan_summary.pairs_emitted
+
+        if scan_summary.pairs_emitted == 0:
+            write_stage_outcome(
+                outcome_path,
+                state="EMPTY_RESULT",
+                reason_code="NO_SEQUENCE_CANDIDATES",
+                message=(
+                    "The full-V2 rescue scan completed successfully "
+                    "but emitted no sequence candidate pairs."
+                ),
+                counts=outcome_counts,
+            )
+
+            warning = (
+                f"WARNING [05R1 {role}]: full-V2 rescue scan completed "
+                "successfully but emitted zero candidate pairs."
+            )
+            print(warning, file=log)
+            print(warning, file=sys.stderr)
+
+        else:
+            write_stage_outcome(
+                outcome_path,
+                state="COMPLETED",
+                reason_code="CANDIDATE_PAIRS_EMITTED",
+                message=(
+                    "The full-V2 rescue scan completed successfully "
+                    "and emitted sequence candidate pairs."
+                ),
+                counts=outcome_counts,
+            )
 
     produced = {
         path.relative_to(staging).as_posix()
