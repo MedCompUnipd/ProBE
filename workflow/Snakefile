@@ -208,6 +208,14 @@ POST_RESCUE_REPORT_SCRIPT = str(
     / "05R_POST_report_unresolved_targets.py"
 )
 
+ALIGNMENT_JOBS_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "06A_prepare_alignment_jobs.py"
+)
+
+
 
 
 
@@ -912,27 +920,26 @@ rule stage_05D:
 
 rule stage_06A:
     input:
-        bundle("01"),
-        bundle("05A2"),
-        bundle("05C2"),
-        both("05D")
+        target_manifest=bundle("01"),
+        final_union_manifest=bundle("05A2"),
+        taxonomy_audit_manifest=bundle("05C2"),
+        start_store_manifest=bundle("05D", "START"),
+        end_store_manifest=bundle("05D", "END"),
+        implementation_script=ALIGNMENT_JOBS_SCRIPT
     output:
         bundle("06A")
     log:
         stage_log("06A")
     params:
-        stage="06A",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="06A"
     threads:
         cfg.resources("06A")["threads"]
     resources:
         mem_mb=cfg.resources("06A")["mem_mb"],
         runtime=cfg.resources("06A")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_06A.py"
+
 
 rule stage_NONEXACT:
     input:
