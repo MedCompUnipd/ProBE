@@ -207,3 +207,33 @@ def test_stage_04a_declares_no_ontology_provenance():
 
     assert "ontology=None" in runner
     assert "ontology={}" not in runner
+
+
+def test_stage_04b_is_production_wired():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04B:")
+    end = text.index("rule stage_04C:", start)
+    block = text[start:end]
+
+    assert 'anchor_manifest=bundle("04A", "{role}")' in block
+    assert 'taxonomy_manifest=bundle("02B", "{role}")' in block
+    assert "implementation_script=DIRECT_ANCHOR_CLASSIFICATION_SCRIPT" in block
+    assert "taxonomy_module=TAXONOMY_MODULE" in block
+
+    assert 'stage="04B"' in block
+    assert "classification_policy=cfg.stage04b_parameters()" in block
+    assert '"scripts/run_stage_04B.py"' in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_04b_implementation_inputs_are_declared():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    assert "DIRECT_ANCHOR_CLASSIFICATION_SCRIPT" in text
+    assert '"04_classify_direct_anchors.py"' in text
+    assert "TAXONOMY_MODULE" in text

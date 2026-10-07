@@ -367,6 +367,12 @@ class PipelineConfig:
             for key in STAGE03_PARAMETER_KEYS
         }
 
+    def stage04b_parameters(self) -> dict[str, str]:
+        """Return only the scientific policy consumed by Stage 04B."""
+        return {
+            "taxonomy_policy": self.data["scientific"]["sequence"]["taxonomy_policy"],
+        }
+
     def resources(self, stage: str) -> dict[str, int]:
         resources = self.data["resources"]
         return dict(resources["stages"].get(stage, resources["default"]))

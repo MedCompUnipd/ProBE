@@ -11,6 +11,10 @@ FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1"}
 
 PROJECT_ROOT = Path(workflow.basedir).parent.resolve()
 
+DIRECT_ANCHOR_CLASSIFICATION_SCRIPT = str(
+    PROJECT_ROOT / "scripts" / "pipeline" / "04_classify_direct_anchors.py"
+)
+
 PRIMARY_CANDIDATE_SCAN_BINARY = str(
     PROJECT_ROOT
     / ".pixi"
@@ -434,25 +438,25 @@ rule stage_04A:
 
 rule stage_04B:
     input:
-        bundle("04A", "{role}"),
-        bundle("02B", "{role}")
+        anchor_manifest=bundle("04A", "{role}"),
+        taxonomy_manifest=bundle("02B", "{role}"),
+        implementation_script=DIRECT_ANCHOR_CLASSIFICATION_SCRIPT,
+        taxonomy_module=TAXONOMY_MODULE
     output:
         bundle("04B", "{role}")
     log:
         stage_log("04B", "{role}")
     params:
         stage="04B",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        classification_policy=cfg.stage04b_parameters()
     threads:
         cfg.resources("04B")["threads"]
     resources:
         mem_mb=cfg.resources("04B")["mem_mb"],
         runtime=cfg.resources("04B")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04B.py"
+
 
 rule stage_04C:
     input:
