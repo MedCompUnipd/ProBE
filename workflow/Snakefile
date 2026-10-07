@@ -215,6 +215,14 @@ ALIGNMENT_JOBS_SCRIPT = str(
     / "06A_prepare_alignment_jobs.py"
 )
 
+NONEXACT_SELECTION_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "NONEXACT_select_alignment_jobs.py"
+)
+
+
 
 
 
@@ -943,24 +951,22 @@ rule stage_06A:
 
 rule stage_NONEXACT:
     input:
-        bundle("06A")
+        alignment_manifest=bundle("06A"),
+        implementation_script=NONEXACT_SELECTION_SCRIPT
     output:
         bundle("NONEXACT")
     log:
         stage_log("NONEXACT")
     params:
-        stage="NONEXACT",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="NONEXACT"
     threads:
         cfg.resources("NONEXACT")["threads"]
     resources:
         mem_mb=cfg.resources("NONEXACT")["mem_mb"],
         runtime=cfg.resources("NONEXACT")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_NONEXACT.py"
+
 
 rule stage_06C0:
     input:
