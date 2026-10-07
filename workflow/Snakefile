@@ -182,6 +182,14 @@ FINAL_TAXONOMY_AUDIT_SCRIPT = str(
     / "05C2_freeze_taxonomy_audit_channel.py"
 )
 
+POST_RESCUE_REPORT_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "05R_POST_report_unresolved_targets.py"
+)
+
+
 
 
 NATIVE_BUILD_SHARED_INPUTS = [
@@ -821,30 +829,32 @@ rule stage_05C2:
 
 rule stage_05R_POST:
     input:
-        bundle("05B"),
-        both("05R0"),
-        both("05R1"),
-        bundle("05A2"),
-        bundle("05C2"),
-        both("02B"),
-        both("04B")
+        uncovered_manifest=bundle("05B"),
+        start_r0_manifest=bundle("05R0", "START"),
+        end_r0_manifest=bundle("05R0", "END"),
+        start_r1_manifest=bundle("05R1", "START"),
+        end_r1_manifest=bundle("05R1", "END"),
+        final_union_manifest=bundle("05A2"),
+        taxonomy_audit_manifest=bundle("05C2"),
+        start_taxonomy_manifest=bundle("02B", "START"),
+        end_taxonomy_manifest=bundle("02B", "END"),
+        start_anchor_manifest=bundle("04B", "START"),
+        end_anchor_manifest=bundle("04B", "END"),
+        implementation_script=POST_RESCUE_REPORT_SCRIPT
     output:
         bundle("05R_POST")
     log:
         stage_log("05R_POST")
     params:
-        stage="05R_POST",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="05R_POST"
     threads:
         cfg.resources("05R_POST")["threads"]
     resources:
         mem_mb=cfg.resources("05R_POST")["mem_mb"],
         runtime=cfg.resources("05R_POST")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05R_POST.py"
+
 
 rule stage_05D:
     input:
