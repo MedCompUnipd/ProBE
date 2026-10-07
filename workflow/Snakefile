@@ -295,6 +295,13 @@ DIRECTIONAL_GLOCAL_BUILD_INPUTS = [
     str(PROJECT_ROOT / "pixi.lock"),
 ]
 
+FINALIZE_DIRECTIONAL_GLOCAL_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "06C1_finalize_directional_glocal.py"
+)
+
 rule all:
     input:
         bundle("06C1"),
@@ -1028,27 +1035,24 @@ rule stage_06C0:
 
 rule stage_06C1:
     input:
-        bundle("06A"),
-        bundle("06C0")
+        alignment_manifest=bundle("06A"),
+        full_dp_manifest=bundle("06C0"),
+        implementation_script=FINALIZE_DIRECTIONAL_GLOCAL_SCRIPT
     output:
         bundle("06C1")
     log:
         stage_log("06C1")
     params:
-        stage="06C1",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        stage="06C1"
     threads:
         cfg.resources("06C1")["threads"]
     resources:
         mem_mb=cfg.resources("06C1")["mem_mb"],
         runtime=cfg.resources("06C1")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_06C1.py"
 
-# Explicit validation only. This never runs merely to decide a normal restart.
+
 rule validate_artifacts:
     input:
         ([bundle("00")] if cfg.uses_adapter else []),
