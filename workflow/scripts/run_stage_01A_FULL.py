@@ -91,6 +91,33 @@ with log_path.open("w", encoding="utf-8") as log:
 
             summary_path = staging / f"{output_prefix_name}.summary.json"
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
+
+            if summary.get("release_id") != release_id:
+                raise ValueError(
+                    "01A_FULL summary release_id mismatch: "
+                    f"expected {release_id}, got {summary.get('release_id')}"
+                )
+
+            totals = summary.get("totals")
+            if not isinstance(totals, dict):
+                raise ValueError("01A_FULL summary is missing totals")
+
+            records_written = totals.get("records_written")
+            if (
+                isinstance(records_written, bool)
+                or not isinstance(records_written, int)
+                or records_written < 0
+            ):
+                raise ValueError("01A_FULL summary has invalid totals.records_written")
+
+            if records_written == 0:
+                raise RuntimeError(
+                    "01A_FULL produced zero UniProt records; "
+                    "the FULL V2 reference release is unusable"
+                )
+
+            log.write(f"records_written\\t{records_written}\\n")
+
             summary["outputs"] = {
                 "fasta": f"{output_prefix_name}.fasta",
                 "issues": f"{output_prefix_name}.issues.tsv",
