@@ -56,6 +56,27 @@ DIRECT_ACCESSION_ANCHORS_BUILD_INPUTS = [
     str(PROJECT_ROOT / "pixi.toml"),
     str(PROJECT_ROOT / "pixi.lock"),
 ]
+ONEHOP_LINEAGE_SCAN_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-onehop-lineage-scan"
+    / "probe-onehop-lineage-scan-v1"
+)
+
+ONEHOP_LINEAGE_SCAN_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
+    str(
+        PROJECT_ROOT
+        / "cpp"
+        / "src"
+        / "probe_onehop_lineage_scan_v1.cpp"
+    ),
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+]
+
+
 RELEASE_FASTA_BINARY = str(
     PROJECT_ROOT
     / ".pixi"
@@ -563,28 +584,40 @@ rule stage_04D1:
         "scripts/run_stage_04D1.py"
 
 
+rule build_onehop_lineage_scan:
+    input:
+        ONEHOP_LINEAGE_SCAN_BUILD_INPUTS
+    output:
+        ONEHOP_LINEAGE_SCAN_BINARY
+    log:
+        stage_log("build-onehop-lineage-scan")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "cd {params.project_root:q} && "
+        "pixi run build-onehop-lineage-scan > {log:q} 2>&1"
+
+
 rule stage_04D2:
     input:
-        bundle("04D1"),
-        bundle("04D0b", "{role}"),
-        bundle("01A_FULL", "{role}")
+        index_manifest=bundle("04D1"),
+        taxonomy_manifest=bundle("04D0b", "{role}"),
+        full_manifest=bundle("01A_FULL", "{role}"),
+        binary=ONEHOP_LINEAGE_SCAN_BINARY
     output:
         bundle("04D2", "{role}")
     log:
         stage_log("04D2", "{role}")
     params:
-        stage="04D2",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="04D2"
     threads:
         cfg.resources("04D2")["threads"]
     resources:
         mem_mb=cfg.resources("04D2")["mem_mb"],
         runtime=cfg.resources("04D2")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04D2.py"
+
 
 rule stage_04E:
     input:

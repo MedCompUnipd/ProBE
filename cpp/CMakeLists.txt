@@ -41,3 +41,8 @@ add_executable(
     probe-direct-accession-anchors-v1
     src/probe_direct_accession_anchors_v1.cpp
 )
+
+add_executable(
+    probe-onehop-lineage-scan-v1
+    src/probe_onehop_lineage_scan_v1.cpp
+)

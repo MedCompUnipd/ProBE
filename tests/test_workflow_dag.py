@@ -344,3 +344,34 @@ def test_stage_04d1_builds_common_frozen_lineage_scan_index():
     assert 'ontology=cfg.data["ontology"]' not in block
     assert "release_config=" not in block
     assert "target_contract=" not in block
+
+
+def test_stage_04d2_uses_production_onehop_lineage_scanner():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    build_start = text.index("rule build_onehop_lineage_scan:")
+    stage_start = text.index("rule stage_04D2:", build_start)
+    build_block = text[build_start:stage_start]
+
+    assert "ONEHOP_LINEAGE_SCAN_BUILD_INPUTS" in build_block
+    assert "ONEHOP_LINEAGE_SCAN_BINARY" in build_block
+    assert "pixi run build-onehop-lineage-scan" in build_block
+
+    stage_end = text.index("rule stage_04E:", stage_start)
+    block = text[stage_start:stage_end]
+
+    assert 'index_manifest=bundle("04D1")' in block
+    assert 'taxonomy_manifest=bundle("04D0b", "{role}")' in block
+    assert 'full_manifest=bundle("01A_FULL", "{role}")' in block
+    assert "binary=ONEHOP_LINEAGE_SCAN_BINARY" in block
+    assert 'stage="04D2"' in block
+    assert '"scripts/run_stage_04D2.py"' in block
+
+    assert 'bundle("03"' not in block
+    assert 'bundle("04C"' not in block
+    assert 'bundle("04B"' not in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
