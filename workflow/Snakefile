@@ -155,6 +155,14 @@ CANDIDATE_CHANNEL_UNION_SCRIPT = str(
     / "05A_union_candidate_channels.py"
 )
 
+
+UNCOVERED_TARGET_AUDIT_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "05B_audit_uncovered_targets.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -678,26 +686,25 @@ rule stage_05A:
 
 rule stage_05B:
     input:
-        bundle("01"),
-        bundle("05A"),
-        both("04B")
+        targets_manifest=bundle("01"),
+        candidate_union_manifest=bundle("05A"),
+        start_anchor_manifest=bundle("04B", "START"),
+        end_anchor_manifest=bundle("04B", "END"),
+        implementation_script=UNCOVERED_TARGET_AUDIT_SCRIPT
     output:
         bundle("05B")
     log:
         stage_log("05B")
     params:
         stage="05B",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        policy=cfg.stage05b_parameters()
     threads:
         cfg.resources("05B")["threads"]
     resources:
         mem_mb=cfg.resources("05B")["mem_mb"],
         runtime=cfg.resources("05B")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_05B.py"
 
 rule stage_05R0:
     input:

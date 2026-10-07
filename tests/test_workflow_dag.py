@@ -453,3 +453,59 @@ def test_stage_05a_keeps_tunable_k_generic():
     assert "k != 7" not in runner
     assert "k == 7" not in runner
     assert 'cfg.data["scientific"]' not in runner
+
+
+def test_stage_05b_audits_uncovered_targets_without_modifying_candidates():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_05B:")
+    rest = text[start:]
+    next_rule = rest.index("\nrule ", len("rule stage_05B:"))
+    block = rest[:next_rule]
+
+    assert 'targets_manifest=bundle("01")' in block
+    assert 'candidate_union_manifest=bundle("05A")' in block
+    assert 'start_anchor_manifest=bundle("04B", "START")' in block
+    assert 'end_anchor_manifest=bundle("04B", "END")' in block
+    assert "implementation_script=UNCOVERED_TARGET_AUDIT_SCRIPT" in block
+
+    assert 'bundle("05B")' in block
+    assert 'stage="05B"' in block
+    assert "policy=cfg.stage05b_parameters()" in block
+    assert '"scripts/run_stage_05B.py"' in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_05b_uses_configured_k_without_frozen_k7_schema():
+    repo_root = SNAKEFILE.parent.parent
+
+    pipeline_script = (
+        repo_root
+        / "scripts"
+        / "pipeline"
+        / "05B_audit_uncovered_targets.py"
+    ).read_text(encoding="utf-8")
+
+    runner = (
+        repo_root
+        / "workflow"
+        / "scripts"
+        / "run_stage_05B.py"
+    ).read_text(encoding="utf-8")
+
+    assert "--k" in pipeline_script
+    assert "kmer_sequence_searchable" in pipeline_script
+    assert "TARGET_LEN_LT_K_AND_NO_DIRECT_ANCHOR" in pipeline_script
+    assert "TARGET_LEN_LT_K_AND_DIRECT_ANCHOR_INELIGIBLE" in pipeline_script
+
+    assert "k7_sequence_searchable" not in pipeline_script
+    assert "TARGET_LEN_LT_7" not in pipeline_script
+    assert "START-2023-01" not in pipeline_script
+    assert "END-2026-03" not in pipeline_script
+
+    assert 'policy["k"]' in runner
+    assert 'cfg.data["scientific"]' not in runner
