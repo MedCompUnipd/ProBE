@@ -237,3 +237,32 @@ def test_stage_04b_implementation_inputs_are_declared():
     assert "DIRECT_ANCHOR_CLASSIFICATION_SCRIPT" in text
     assert '"04_classify_direct_anchors.py"' in text
     assert "TAXONOMY_MODULE" in text
+
+
+def test_stage_04c_is_production_wired():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04C:")
+    end = text.index("rule stage_04D0a:", start)
+    block = text[start:end]
+
+    assert 'target_manifest=bundle("01")' in block
+    assert 'start_anchor_manifest=bundle("04B", "START")' in block
+    assert 'end_anchor_manifest=bundle("04B", "END")' in block
+    assert "implementation_script=DIRECT_LINEAGE_KEYS_SCRIPT" in block
+
+    assert 'stage="04C"' in block
+    assert '"scripts/run_stage_04C.py"' in block
+
+    assert 'bundle("03"' not in block
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
+
+
+def test_stage_04c_implementation_input_is_declared():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    assert "DIRECT_LINEAGE_KEYS_SCRIPT" in text
+    assert '"04_compile_direct_lineage_keys.py"' in text
