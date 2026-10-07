@@ -139,6 +139,14 @@ LINEAGE_SCAN_INDEX_SCRIPT = str(
     / "04D1_prepare_lineage_scan_index.py"
 )
 
+
+LINEAGE_EVIDENCE_COLLAPSE_SCRIPT = str(
+    PROJECT_ROOT
+    / "scripts"
+    / "pipeline"
+    / "04E_collapse_lineage_evidence.py"
+)
+
 NATIVE_BUILD_SHARED_INPUTS = [
     str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
     str(PROJECT_ROOT / "pixi.toml"),
@@ -621,24 +629,22 @@ rule stage_04D2:
 
 rule stage_04E:
     input:
-        bundle("04D2", "{role}")
+        evidence_manifest=bundle("04D2", "{role}"),
+        implementation_script=LINEAGE_EVIDENCE_COLLAPSE_SCRIPT
     output:
         bundle("04E", "{role}")
     log:
         stage_log("04E", "{role}")
     params:
-        stage="04E",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=lambda w: cfg.release(w.role),
-        target_contract=cfg.data["targets"]
+        stage="04E"
     threads:
         cfg.resources("04E")["threads"]
     resources:
         mem_mb=cfg.resources("04E")["mem_mb"],
         runtime=cfg.resources("04E")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_04E.py"
+
 
 rule stage_05A:
     input:

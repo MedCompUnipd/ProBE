@@ -375,3 +375,27 @@ def test_stage_04d2_uses_production_onehop_lineage_scanner():
     assert 'ontology=cfg.data["ontology"]' not in block
     assert "release_config=" not in block
     assert "target_contract=" not in block
+
+
+def test_stage_04e_collapses_onehop_lineage_evidence_without_filtering():
+    text = SNAKEFILE.read_text(encoding="utf-8")
+
+    start = text.index("rule stage_04E:")
+    rest = text[start:]
+    next_rule = rest.index("\nrule ", len("rule stage_04E:"))
+    block = rest[:next_rule]
+
+    assert 'evidence_manifest=bundle("04D2", "{role}")' in block
+    assert "implementation_script=LINEAGE_EVIDENCE_COLLAPSE_SCRIPT" in block
+    assert 'stage="04E"' in block
+    assert '"scripts/run_stage_04E.py"' in block
+
+    assert 'bundle("03"' not in block
+    assert 'bundle("04D1"' not in block
+    assert 'bundle("04D0b"' not in block
+    assert 'bundle("04C"' not in block
+
+    assert 'scientific=cfg.data["scientific"]' not in block
+    assert 'ontology=cfg.data["ontology"]' not in block
+    assert "release_config=" not in block
+    assert "target_contract=" not in block
