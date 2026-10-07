@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(ZLIB REQUIRED)
+find_package(OpenMP REQUIRED)
 
 add_executable(
     probe-release-fasta-v2
@@ -50,4 +51,13 @@ add_executable(
 add_executable(
     probe-candidate-sequence-extract-v1
     src/probe_candidate_sequence_extract_v1.cpp
+)
+
+add_executable(
+    probe-directional-glocal-full-dp-v1
+    src/probe_directional_glocal_full_dp_v1.cpp
+)
+target_link_libraries(
+    probe-directional-glocal-full-dp-v1
+    PRIVATE OpenMP::OpenMP_CXX
 )

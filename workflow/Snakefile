@@ -276,6 +276,25 @@ def both(stage):
 wildcard_constraints:
     role="START|END"
 
+DIRECTIONAL_GLOCAL_BINARY = str(
+    PROJECT_ROOT
+    / ".pixi"
+    / "build"
+    / "probe-directional-glocal-full-dp"
+    / "probe-directional-glocal-full-dp-v1"
+)
+DIRECTIONAL_GLOCAL_BUILD_INPUTS = [
+    str(PROJECT_ROOT / "cpp" / "CMakeLists.txt"),
+    str(
+        PROJECT_ROOT
+        / "cpp"
+        / "src"
+        / "probe_directional_glocal_full_dp_v1.cpp"
+    ),
+    str(PROJECT_ROOT / "pixi.toml"),
+    str(PROJECT_ROOT / "pixi.lock"),
+]
+
 rule all:
     input:
         bundle("06C1"),
@@ -901,8 +920,9 @@ rule build_candidate_sequence_extract:
     params:
         project_root=str(PROJECT_ROOT)
     shell:
-        "cd {params.project_root:q} && "
-        "pixi run build-candidate-sequence-extract > {log:q} 2>&1"
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-candidate-sequence-extract) "
+        "> {log:q} 2>&1"
 
 
 rule stage_05D:
@@ -968,28 +988,43 @@ rule stage_NONEXACT:
         "scripts/run_stage_NONEXACT.py"
 
 
+rule build_directional_glocal_full_dp:
+    input:
+        DIRECTIONAL_GLOCAL_BUILD_INPUTS
+    output:
+        DIRECTIONAL_GLOCAL_BINARY
+    log:
+        stage_log("build-directional-glocal-full-dp")
+    params:
+        project_root=str(PROJECT_ROOT)
+    shell:
+        "mkdir -p \"$(dirname {log:q})\" && "
+        "(cd {params.project_root:q} && pixi run build-directional-glocal-full-dp) "
+        "> {log:q} 2>&1"
+
+
 rule stage_06C0:
     input:
-        bundle("NONEXACT"),
-        bundle("01"),
-        both("05D")
+        target_manifest=bundle("01"),
+        nonexact_manifest=bundle("NONEXACT"),
+        start_store_manifest=bundle("05D", "START"),
+        end_store_manifest=bundle("05D", "END"),
+        binary=DIRECTIONAL_GLOCAL_BINARY
     output:
         bundle("06C0")
     log:
         stage_log("06C0")
     params:
         stage="06C0",
-        scientific=cfg.data["scientific"],
-        ontology=cfg.data["ontology"],
-        release_config=cfg.data["releases"],
-        target_contract=cfg.data["targets"]
+        alignment_policy=cfg.data["scientific"]["alignment"]
     threads:
         cfg.resources("06C0")["threads"]
     resources:
         mem_mb=cfg.resources("06C0")["mem_mb"],
         runtime=cfg.resources("06C0")["runtime_minutes"]
     script:
-        "scripts/unimplemented_stage.py"
+        "scripts/run_stage_06C0.py"
+
 
 rule stage_06C1:
     input:

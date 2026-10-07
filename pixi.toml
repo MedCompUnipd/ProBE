@@ -48,3 +48,5 @@ build-candidate-sequence-extract = "cmake -S cpp -B .pixi/build/probe-candidate-
 candidate-sequence-extract-v1 = ".pixi/build/probe-candidate-sequence-extract/probe-candidate-sequence-extract-v1"
 build-onehop-lineage-scan = "cmake -S cpp -B .pixi/build/probe-onehop-lineage-scan -G Ninja && cmake --build .pixi/build/probe-onehop-lineage-scan --target probe-onehop-lineage-scan-v1"
 onehop-lineage-scan-v1 = ".pixi/build/probe-onehop-lineage-scan/probe-onehop-lineage-scan-v1"
+build-directional-glocal-full-dp = "cmake -S cpp -B .pixi/build/probe-directional-glocal-full-dp -G Ninja && cmake --build .pixi/build/probe-directional-glocal-full-dp --target probe-directional-glocal-full-dp-v1"
+directional-glocal-full-dp-v1 = ".pixi/build/probe-directional-glocal-full-dp/probe-directional-glocal-full-dp-v1"
