@@ -7,9 +7,26 @@ from probe.workflow.config import PipelineConfig, ROLES
 configfile: str(Path(workflow.basedir).parent / "config" / "pipeline.yaml")
 
 cfg = PipelineConfig.from_mapping(config)
-FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1"}
+FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07"}
 
 PROJECT_ROOT = Path(workflow.basedir).parent.resolve()
+
+STAGE07_CLI_SCRIPT = str(
+    PROJECT_ROOT / "scripts" / "pipeline" / "07_resolve_candidate_associations.py"
+)
+STAGE07_RUNNER_SCRIPT = str(PROJECT_ROOT / "workflow" / "scripts" / "run_stage_07.py")
+STAGE07_IMPLEMENTATION_MODULES = [
+    str(PROJECT_ROOT / "src" / "probe" / name)
+    for name in (
+        "resolver.py",
+        "resolver_alignments.py",
+        "resolver_anchors.py",
+        "resolver_assembly.py",
+        "resolver_candidates.py",
+        "resolver_lineage.py",
+        "resolver_metadata.py",
+    )
+]
 
 DIRECT_ANCHOR_CLASSIFICATION_SCRIPT = str(
     PROJECT_ROOT / "scripts" / "pipeline" / "04_classify_direct_anchors.py"
@@ -305,7 +322,8 @@ FINALIZE_DIRECTIONAL_GLOCAL_SCRIPT = str(
 rule all:
     input:
         bundle("06C1"),
-        bundle("05R_POST")
+        bundle("05R_POST"),
+        bundle("07")
 
 if cfg.uses_adapter:
     rule stage_00:
@@ -1053,6 +1071,43 @@ rule stage_06C1:
         "scripts/run_stage_06C1.py"
 
 
+rule stage_07:
+    input:
+        targets_manifest=bundle("01"),
+        primary_manifest=bundle("05A2"),
+        audit_manifest=bundle("05C2"),
+        start_taxonomy_manifest=bundle("02B", "START"),
+        end_taxonomy_manifest=bundle("02B", "END"),
+        start_anchors_manifest=bundle("04B", "START"),
+        end_anchors_manifest=bundle("04B", "END"),
+        lineage_index_manifest=bundle("04D1"),
+        start_lineage_manifest=bundle("04D2", "START"),
+        end_lineage_manifest=bundle("04D2", "END"),
+        jobs_manifest=bundle("06A"),
+        alignments_manifest=bundle("06C1"),
+        implementation_script=STAGE07_CLI_SCRIPT,
+        runner_script=STAGE07_RUNNER_SCRIPT,
+        resolver_modules=STAGE07_IMPLEMENTATION_MODULES
+    output:
+        bundle("07")
+    log:
+        stage_log("07")
+    params:
+        work_root=cfg.data["locations"]["work"],
+        results_root=cfg.data["locations"]["output"],
+        publication_root=cfg.data["locations"]["output"],
+        start_release_id=cfg.release("START")["release_id"],
+        end_release_id=cfg.release("END")["release_id"],
+        stage07_policy=cfg.stage07_parameters()
+    threads:
+        cfg.resources("07")["threads"]
+    resources:
+        mem_mb=cfg.resources("07")["mem_mb"],
+        runtime=cfg.resources("07")["runtime_minutes"]
+    script:
+        "scripts/run_stage_07.py"
+
+
 rule validate_artifacts:
     input:
         ([bundle("00")] if cfg.uses_adapter else []),
@@ -1084,6 +1139,7 @@ rule validate_artifacts:
         [bundle("NONEXACT")],
         [bundle("06C0")],
         [bundle("06C1")],
+        [bundle("07")],
     log:
         stage_log("validate_artifacts")
     params:

@@ -5,9 +5,9 @@
 This registry defines the production pre-resolver workflow from target
 normalization through canonical directional glocal alignments.
 
-The workflow stops at Stage 06C1.
+The production workflow includes Stage 07 candidate association resolution.
 
-Stage 07 / SAME_ENTITY is intentionally outside this workflow.
+Stage 07 determines evidence-supported candidate associations and annotation-donor eligibility. General SAME_ENTITY inference, GO annotation retrieval, and final benchmark selection are not performed by Stage 07.
 
 `TESTING/candidate-pipeline-v2` is a read-only validation oracle and is not a
 production runtime dependency.
@@ -339,7 +339,6 @@ The following are deliberately absent from the production pre-resolver DAG:
 
 - Stage 05R2 sensitive probe
 - Stage 06B approximate/non-canonical alignment path
-- Stage 07
 - SAME_ENTITY inference
 - custom Python workflow scheduler
 - custom restart/state database

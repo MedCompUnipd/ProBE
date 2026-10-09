@@ -91,6 +91,7 @@ def test_real_snakemake_dag_structure(tmp_path, adapter):
         "NONEXACT",
         "06C0",
         "06C1",
+        "07",
     ]
     for upstream, downstream in zip(chain, chain[1:], strict=False):
         assert (f"stage_{upstream}", f"stage_{downstream}") in edges
@@ -102,8 +103,7 @@ def test_real_snakemake_dag_structure(tmp_path, adapter):
         a in {"stage_03", "stage_05R1"} and b.startswith("stage_04") for a, b in edges
     )
     assert not any(
-        name.startswith(("stage_07", "stage_05R2", "stage_06B"))
-        for name in nodes.values()
+        name.startswith(("stage_05R2", "stage_06B")) for name in nodes.values()
     )
     assert not (tmp_path / "results").exists()
     assert not (tmp_path / "work").exists()
@@ -134,7 +134,7 @@ def test_production_snakefile_invariants():
 
     assert not re.search(r"^rule stage_05R2:$", text, re.MULTILINE)
     assert not re.search(r"^rule stage_06B:$", text, re.MULTILINE)
-    assert not re.search(r"^rule stage_07", text, re.MULTILINE)
+    assert re.search(r"^rule stage_07:$", text, re.MULTILINE)
 
     assert '"manifest.json"' in text
 
@@ -201,9 +201,9 @@ def test_direct_accession_anchor_build_is_declared():
 
 
 def test_stage_04a_declares_no_ontology_provenance():
-    runner = (
-        ROOT / "workflow" / "scripts" / "run_stage_04A.py"
-    ).read_text(encoding="utf-8")
+    runner = (ROOT / "workflow" / "scripts" / "run_stage_04A.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "ontology=None" in runner
     assert "ontology={}" not in runner
@@ -429,18 +429,12 @@ def test_stage_05a_keeps_tunable_k_generic():
     repo_root = SNAKEFILE.parent.parent
 
     pipeline_script = (
-        repo_root
-        / "scripts"
-        / "pipeline"
-        / "05A_union_candidate_channels.py"
+        repo_root / "scripts" / "pipeline" / "05A_union_candidate_channels.py"
     ).read_text(encoding="utf-8")
 
-    runner = (
-        repo_root
-        / "workflow"
-        / "scripts"
-        / "run_stage_05A.py"
-    ).read_text(encoding="utf-8")
+    runner = (repo_root / "workflow" / "scripts" / "run_stage_05A.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "target_distinct_kmers" in pipeline_script
     assert "shared_distinct_kmers" in pipeline_script
@@ -484,18 +478,12 @@ def test_stage_05b_uses_configured_k_without_frozen_k7_schema():
     repo_root = SNAKEFILE.parent.parent
 
     pipeline_script = (
-        repo_root
-        / "scripts"
-        / "pipeline"
-        / "05B_audit_uncovered_targets.py"
+        repo_root / "scripts" / "pipeline" / "05B_audit_uncovered_targets.py"
     ).read_text(encoding="utf-8")
 
-    runner = (
-        repo_root
-        / "workflow"
-        / "scripts"
-        / "run_stage_05B.py"
-    ).read_text(encoding="utf-8")
+    runner = (repo_root / "workflow" / "scripts" / "run_stage_05B.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "--k" in pipeline_script
     assert "kmer_sequence_searchable" in pipeline_script
@@ -538,18 +526,12 @@ def test_stage_05r0_consumes_searchability_fact_without_rereading_k():
     repo_root = SNAKEFILE.parent.parent
 
     pipeline_script = (
-        repo_root
-        / "scripts"
-        / "pipeline"
-        / "05R0_prepare_rescue_targets.py"
+        repo_root / "scripts" / "pipeline" / "05R0_prepare_rescue_targets.py"
     ).read_text(encoding="utf-8")
 
-    runner = (
-        repo_root
-        / "workflow"
-        / "scripts"
-        / "run_stage_05R0.py"
-    ).read_text(encoding="utf-8")
+    runner = (repo_root / "workflow" / "scripts" / "run_stage_05R0.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "kmer_sequence_searchable" in pipeline_script
     assert "STAGE05B_UNCOVERED_AND_K_SEARCHABLE" in pipeline_script
@@ -589,12 +571,9 @@ def test_stage_05r1_reuses_stage03_scanner_on_full_v2():
 def test_stage_05r1_uses_all_tunable_stage03_parameters():
     repo_root = SNAKEFILE.parent.parent
 
-    runner = (
-        repo_root
-        / "workflow"
-        / "scripts"
-        / "run_stage_05R1.py"
-    ).read_text(encoding="utf-8")
+    runner = (repo_root / "workflow" / "scripts" / "run_stage_05R1.py").read_text(
+        encoding="utf-8"
+    )
 
     for key in (
         "k",
@@ -607,10 +586,14 @@ def test_stage_05r1_uses_all_tunable_stage03_parameters():
 
     assert '"candidate_universe": "FULL_V2"' in runner
     assert '"rescue_algorithm": "SAME_AS_STAGE_03"' in runner
-    assert "PRIMARY_CANDIDATE_SCAN_BINARY" in SNAKEFILE.read_text(
-        encoding="utf-8"
-    )
+    assert "PRIMARY_CANDIDATE_SCAN_BINARY" in SNAKEFILE.read_text(encoding="utf-8")
 
     assert "k == 7" not in runner
     assert "k != 7" not in runner
     assert "k7" not in runner.lower()
+
+
+def test_stage07_script_accepts_snakemake_preamble():
+    runner = SNAKEFILE.parent / "scripts" / "run_stage_07.py"
+    text = runner.read_text(encoding="utf-8")
+    compile("snakemake = None\n" + text, str(runner), "exec")

@@ -93,15 +93,8 @@ def _int_range(
     minimum: int,
     maximum: int,
 ) -> int:
-    if (
-        type(value) is not int
-        or value < minimum
-        or value > maximum
-    ):
-        raise ValueError(
-            f"{label}: expected integer in range "
-            f"{minimum}..{maximum}"
-        )
+    if type(value) is not int or value < minimum or value > maximum:
+        raise ValueError(f"{label}: expected integer in range {minimum}..{maximum}")
     return value
 
 
@@ -111,10 +104,7 @@ def _float_range(
     minimum: float,
     maximum: float,
 ) -> float:
-    if (
-        type(value) is not float
-        or not minimum <= value <= maximum
-    ):
+    if type(value) is not float or not minimum <= value <= maximum:
         raise ValueError(
             f"{label}: expected floating-point value in range "
             f"{minimum:.2f}..{maximum:.2f}"
@@ -128,9 +118,7 @@ def _choice(
     allowed: set[str],
 ) -> str:
     if type(value) is not str or value not in allowed:
-        raise ValueError(
-            f"{label}: expected one of {sorted(allowed)}"
-        )
+        raise ValueError(f"{label}: expected one of {sorted(allowed)}")
     return value
 
 
@@ -147,6 +135,16 @@ class PipelineConfig:
     @classmethod
     def from_mapping(cls, mapping: dict[str, Any]) -> PipelineConfig:
         data = deepcopy(mapping)
+        if not isinstance(data, dict):
+            raise ValueError("config: expected mapping")
+        data.setdefault("resolver", {"subtaxon_policy": "strict"})
+        data.setdefault(
+            "annotation_donor",
+            {
+                "partial_sequence": "allow",
+                "documentary_fragment": "allow",
+            },
+        )
         _keys(
             data,
             {
@@ -158,11 +156,36 @@ class PipelineConfig:
                 "resources",
                 "validation",
                 "scientific",
+                "resolver",
+                "annotation_donor",
             },
             "config",
         )
         if type(data["schema_version"]) is not int or data["schema_version"] != 1:
             raise ValueError("unsupported config schema_version")
+
+        resolver = _keys(
+            data["resolver"],
+            {"subtaxon_policy"},
+            "resolver",
+        )
+        _choice(
+            resolver["subtaxon_policy"],
+            "resolver.subtaxon_policy",
+            {"strict", "include_audited_same_species"},
+        )
+
+        donor = _keys(
+            data["annotation_donor"],
+            {"partial_sequence", "documentary_fragment"},
+            "annotation_donor",
+        )
+        for name in ("partial_sequence", "documentary_fragment"):
+            _choice(
+                donor[name],
+                f"annotation_donor.{name}",
+                {"allow", "report_only"},
+            )
         targets = _keys(
             data["targets"], {"mode", "fasta", "metadata", "adapter"}, "targets"
         )
@@ -281,17 +304,14 @@ class PipelineConfig:
 
         frozen_view = deepcopy(scientific)
         for key in STAGE03_PARAMETER_KEYS:
-            frozen_view["sequence"][key] = (
-                FROZEN_SCIENTIFIC["sequence"][key]
-            )
+            frozen_view["sequence"][key] = FROZEN_SCIENTIFIC["sequence"][key]
 
         if json.dumps(frozen_view, sort_keys=True) != json.dumps(
             FROZEN_SCIENTIFIC,
             sort_keys=True,
         ):
             raise ValueError(
-                "non-tunable scientific parameters differ from "
-                "frozen validated policy"
+                "non-tunable scientific parameters differ from frozen validated policy"
             )
         resources = _keys(data["resources"], {"default", "stages"}, "resources")
         _keys(
@@ -362,9 +382,13 @@ class PipelineConfig:
 
     def stage03_parameters(self) -> dict[str, Any]:
         sequence = self.data["scientific"]["sequence"]
+        return {key: sequence[key] for key in STAGE03_PARAMETER_KEYS}
+
+    def stage07_parameters(self) -> dict[str, dict[str, str]]:
+        """Return only the effective Stage 07 policy configuration."""
         return {
-            key: sequence[key]
-            for key in STAGE03_PARAMETER_KEYS
+            "resolver": dict(self.data["resolver"]),
+            "annotation_donor": dict(self.data["annotation_donor"]),
         }
 
     def stage04b_parameters(self) -> dict[str, str]:

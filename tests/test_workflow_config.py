@@ -85,7 +85,6 @@ def test_locations_must_not_overlap_inputs_or_each_other(config):
         PipelineConfig.from_mapping(config)
 
 
-
 def test_ontology_snapshot_is_user_configurable(config):
     assert config["ontology"]["expected_sha256"] is None
 
@@ -98,15 +97,10 @@ def test_ontology_snapshot_is_user_configurable(config):
 
     parsed = PipelineConfig.from_mapping(config)
 
+    assert parsed.data["ontology"]["expected_sha256"] == user_selected_sha256
     assert (
-        parsed.data["ontology"]["expected_sha256"]
-        == user_selected_sha256
+        parsed.data["ontology"]["canonical_url"] == "https://example.org/custom-go.owl"
     )
-    assert (
-        parsed.data["ontology"]["canonical_url"]
-        == "https://example.org/custom-go.owl"
-    )
-
 
 
 @pytest.mark.parametrize(
@@ -183,4 +177,118 @@ def test_legacy_stage03_policy_keys_are_rejected(config):
     sequence["exclude_fragments"] = True
 
     with pytest.raises(ValueError, match="scientific.sequence"):
+        PipelineConfig.from_mapping(config)
+
+
+def test_stage07_optional_configuration_defaults(config):
+    config.pop("resolver", None)
+    config.pop("annotation_donor", None)
+    original = deepcopy(config)
+
+    parsed = PipelineConfig.from_mapping(config)
+
+    expected = {
+        "resolver": {"subtaxon_policy": "strict"},
+        "annotation_donor": {
+            "partial_sequence": "allow",
+            "documentary_fragment": "allow",
+        },
+    }
+
+    assert parsed.stage07_parameters() == expected
+    assert config == original
+    assert parsed.data["scientific"] == original["scientific"]
+    assert parsed.stage03_parameters() == {
+        "k": 7,
+        "max_required_shared": 10,
+        "min_target_kmer_fraction": 0.25,
+        "fragment_policy": "exclude",
+        "taxonomy_policy": "rank_aware",
+    }
+
+    explicit = deepcopy(config)
+    explicit.update(expected)
+    assert PipelineConfig.from_mapping(explicit).stage07_parameters() == expected
+
+
+@pytest.mark.parametrize(
+    "section",
+    ["resolver", "annotation_donor"],
+)
+def test_stage07_independently_optional_sections(config, section):
+    values = {
+        "resolver": {
+            "subtaxon_policy": "include_audited_same_species",
+        },
+        "annotation_donor": {
+            "partial_sequence": "report_only",
+            "documentary_fragment": "allow",
+        },
+    }
+    config.pop("resolver", None)
+    config.pop("annotation_donor", None)
+    config[section] = values[section]
+
+    parsed = PipelineConfig.from_mapping(config)
+    assert parsed.data[section] == values[section]
+    assert set(parsed.stage07_parameters()) == {
+        "resolver",
+        "annotation_donor",
+    }
+
+
+@pytest.mark.parametrize(
+    "subtaxon",
+    ["strict", "include_audited_same_species"],
+)
+@pytest.mark.parametrize("partial", ["allow", "report_only"])
+@pytest.mark.parametrize("fragment", ["allow", "report_only"])
+def test_stage07_all_policy_combinations(config, subtaxon, partial, fragment):
+    config["resolver"] = {"subtaxon_policy": subtaxon}
+    config["annotation_donor"] = {
+        "partial_sequence": partial,
+        "documentary_fragment": fragment,
+    }
+
+    parsed = PipelineConfig.from_mapping(config)
+    parameters = parsed.stage07_parameters()
+
+    assert parameters["resolver"]["subtaxon_policy"] == subtaxon
+    assert parameters["annotation_donor"]["partial_sequence"] == partial
+    assert parameters["annotation_donor"]["documentary_fragment"] == fragment
+
+    parameters["resolver"]["subtaxon_policy"] = "modified"
+    assert parsed.data["resolver"]["subtaxon_policy"] == subtaxon
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [
+        ("resolver", {}),
+        ("resolver", None),
+        ("resolver", {"subtaxon_policy": "permissive"}),
+        ("resolver", {"subtaxon_policy": True}),
+        ("resolver", {"subtaxon_policy": "strict", "extra": 1}),
+        ("annotation_donor", {}),
+        ("annotation_donor", {"partial_sequence": "allow"}),
+        (
+            "annotation_donor",
+            {
+                "partial_sequence": "allow",
+                "documentary_fragment": "yes",
+            },
+        ),
+        (
+            "annotation_donor",
+            {
+                "partial_sequence": "allow",
+                "documentary_fragment": "allow",
+                "extra": 1,
+            },
+        ),
+    ],
+)
+def test_stage07_rejects_invalid_policy_sections(config, section, value):
+    config[section] = value
+    with pytest.raises(ValueError):
         PipelineConfig.from_mapping(config)
