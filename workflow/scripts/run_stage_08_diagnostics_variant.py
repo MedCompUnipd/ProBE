@@ -13,8 +13,17 @@ sources = spec["sources"]
 dest = Path(spec["statistics"])
 if Path(context.output.diagnostics_manifest) != (dest / "publication_manifest.json"):
     raise ValueError("Unexpected statistics manifest location")
-if dest.exists() or dest.is_symlink():
-    raise FileExistsError("Published statistics are immutable")
+# Snakemake may precreate the directory containing a manifest output.
+# Only an empty directory is a harmless placeholder.
+if dest.is_symlink() or (dest.exists() and not dest.is_dir()):
+    raise FileExistsError("Non-directory or symlink destination")
+if dest.is_dir():
+    try:
+        dest.rmdir()  # Atomic; cannot remove nonempty directories.
+    except OSError as exc:
+        raise FileExistsError(
+            "Refusing to overwrite a nonempty variant directory"
+        ) from exc
 
 command = [
     sys.executable,
