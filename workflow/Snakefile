@@ -7,7 +7,7 @@ from probe.workflow.config import PipelineConfig, ROLES
 configfile: str(Path(workflow.basedir).parent / "config" / "pipeline.yaml")
 
 cfg = PipelineConfig.from_mapping(config)
-FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07"}
+FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07", "08"}
 
 PROJECT_ROOT = Path(workflow.basedir).parent.resolve()
 
@@ -25,6 +25,25 @@ STAGE07_IMPLEMENTATION_MODULES = [
         "resolver_candidates.py",
         "resolver_lineage.py",
         "resolver_metadata.py",
+    )
+]
+
+STAGE08_CLI_SCRIPT = str(
+    PROJECT_ROOT / "scripts" / "pipeline" / "08_collect_annotations.py"
+)
+STAGE08_RUNNER_SCRIPT = str(PROJECT_ROOT / "workflow" / "scripts" / "run_stage_08.py")
+STAGE08_IMPLEMENTATION_MODULES = [
+    str(PROJECT_ROOT / "src" / "probe" / name)
+    for name in (
+        "records.py",
+        "stage08_donors.py",
+        "stage08_annotations.py",
+        "stage08_collection_inputs.py",
+        "stage08_gaf_collection.py",
+        "stage08_collection_publish.py",
+        "workflow/artifacts.py",
+        "workflow/outcome.py",
+        "workflow/runtime.py",
     )
 ]
 
@@ -1106,6 +1125,32 @@ rule stage_07:
         runtime=cfg.resources("07")["runtime_minutes"]
     script:
         "scripts/run_stage_07.py"
+
+
+rule stage_08:
+    input:
+        stage07_manifest=bundle("07"),
+        start_goa_manifest=bundle("01B1", "START"),
+        end_goa_manifest=bundle("01B1", "END"),
+        go_policy_manifest=bundle("01B0"),
+        implementation_script=STAGE08_CLI_SCRIPT,
+        runner_script=STAGE08_RUNNER_SCRIPT,
+        collection_modules=STAGE08_IMPLEMENTATION_MODULES
+    output:
+        bundle("08")
+    log:
+        stage_log("08")
+    params:
+        work_root=cfg.data["locations"]["work"],
+        results_root=cfg.data["locations"]["output"],
+        stage08_collection=cfg.stage08_collection_parameters()
+    threads:
+        cfg.resources("08")["threads"]
+    resources:
+        mem_mb=cfg.resources("08")["mem_mb"],
+        runtime=cfg.resources("08")["runtime_minutes"]
+    script:
+        "scripts/run_stage_08.py"
 
 
 rule validate_artifacts:

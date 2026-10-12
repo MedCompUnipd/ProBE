@@ -1,0 +1,153 @@
+{
+  "codes": {
+    "EXP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "HDA": {
+      "description": "Legacy ProBE grouping: legacy_experimental_high_throughput",
+      "source": "probe-legacy"
+    },
+    "HEP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_high_throughput",
+      "source": "probe-legacy"
+    },
+    "HGI": {
+      "description": "Legacy ProBE grouping: legacy_experimental_high_throughput",
+      "source": "probe-legacy"
+    },
+    "HMP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_high_throughput",
+      "source": "probe-legacy"
+    },
+    "HTP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_high_throughput",
+      "source": "probe-legacy"
+    },
+    "IBA": {
+      "description": "Legacy ProBE grouping: legacy_phylogenetic_curated",
+      "source": "probe-legacy"
+    },
+    "IBD": {
+      "description": "Legacy ProBE grouping: legacy_phylogenetic_curated",
+      "source": "probe-legacy"
+    },
+    "IC": {
+      "description": "Legacy ProBE grouping: legacy_traceable_curated_statement",
+      "source": "probe-legacy"
+    },
+    "IDA": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "IEA": {
+      "description": "Legacy ProBE grouping: legacy_electronic",
+      "source": "probe-legacy"
+    },
+    "IEP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "IGC": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "IGI": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "IKR": {
+      "description": "Legacy ProBE grouping: legacy_phylogenetic_curated",
+      "source": "probe-legacy"
+    },
+    "IMP": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "IPI": {
+      "description": "Legacy ProBE grouping: legacy_experimental_traditional",
+      "source": "probe-legacy"
+    },
+    "IRD": {
+      "description": "Legacy ProBE grouping: legacy_phylogenetic_curated",
+      "source": "probe-legacy"
+    },
+    "ISA": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "ISM": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "ISO": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "ISS": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "NAS": {
+      "description": "Legacy ProBE grouping: legacy_unusable",
+      "source": "probe-legacy"
+    },
+    "ND": {
+      "description": "Legacy ProBE grouping: legacy_unusable",
+      "source": "probe-legacy"
+    },
+    "RCA": {
+      "description": "Legacy ProBE grouping: legacy_computational_curated",
+      "source": "probe-legacy"
+    },
+    "TAS": {
+      "description": "Legacy ProBE grouping: legacy_traceable_curated_statement",
+      "source": "probe-legacy"
+    }
+  },
+  "groups": {
+    "legacy_computational_curated": [
+      "IGC",
+      "ISA",
+      "ISM",
+      "ISO",
+      "ISS",
+      "RCA"
+    ],
+    "legacy_electronic": [
+      "IEA"
+    ],
+    "legacy_experimental_high_throughput": [
+      "HDA",
+      "HEP",
+      "HGI",
+      "HMP",
+      "HTP"
+    ],
+    "legacy_experimental_traditional": [
+      "EXP",
+      "IDA",
+      "IEP",
+      "IGI",
+      "IMP",
+      "IPI"
+    ],
+    "legacy_phylogenetic_curated": [
+      "IBA",
+      "IBD",
+      "IKR",
+      "IRD"
+    ],
+    "legacy_traceable_curated_statement": [
+      "IC",
+      "TAS"
+    ],
+    "legacy_unusable": [
+      "NAS",
+      "ND"
+    ]
+  },
+  "origin": "ProBE legacy classifications, preserved as a compatibility snapshot; not an official ECO ontology release",
+  "registry_id": "probe-legacy-evidence-snapshot-v1",
+  "schema_version": "probe-evidence-registry-v1"
+}

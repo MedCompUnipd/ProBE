@@ -145,6 +145,7 @@ class PipelineConfig:
                 "documentary_fragment": "allow",
             },
         )
+        data.setdefault("stage08_collection", {"execute_full_scan": False})
         _keys(
             data,
             {
@@ -158,6 +159,7 @@ class PipelineConfig:
                 "scientific",
                 "resolver",
                 "annotation_donor",
+                "stage08_collection",
             },
             "config",
         )
@@ -186,6 +188,13 @@ class PipelineConfig:
                 f"annotation_donor.{name}",
                 {"allow", "report_only"},
             )
+        stage08 = _keys(
+            data["stage08_collection"],
+            {"execute_full_scan"},
+            "stage08_collection",
+        )
+        if type(stage08["execute_full_scan"]) is not bool:
+            raise ValueError("stage08_collection.execute_full_scan must be boolean")
         targets = _keys(
             data["targets"], {"mode", "fasta", "metadata", "adapter"}, "targets"
         )
@@ -390,6 +399,10 @@ class PipelineConfig:
             "resolver": dict(self.data["resolver"]),
             "annotation_donor": dict(self.data["annotation_donor"]),
         }
+
+    def stage08_collection_parameters(self) -> dict[str, bool]:
+        """Only the explicit raw-collection execution authorization."""
+        return dict(self.data["stage08_collection"])
 
     def stage04b_parameters(self) -> dict[str, str]:
         """Return only the scientific policy consumed by Stage 04B."""
