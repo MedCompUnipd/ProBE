@@ -6,6 +6,15 @@ from probe.workflow.config import PipelineConfig, ROLES
 
 configfile: str(Path(workflow.basedir).parent / "config" / "pipeline.yaml")
 
+# Optional, evidence-only experiment. Keep PipelineConfig validation unchanged.
+BENCHMARK_VARIANT_SPEC = config.pop("benchmark_variant_spec", None)
+if BENCHMARK_VARIANT_SPEC is not None:
+    from probe.stage08_variants import read_spec
+
+    BENCHMARK_VARIANT = read_spec(Path(BENCHMARK_VARIANT_SPEC))
+else:
+    BENCHMARK_VARIANT = None
+
 cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07", "08"}
 
@@ -1152,6 +1161,103 @@ rule stage_08:
     script:
         "scripts/run_stage_08.py"
 
+
+# Opt-in M12 variants consume the *published* M10c manifest as a file.
+# No dependency edge to stage_07 or stage_08 is introduced here. All source
+# bundle identities are checked again by the immutable M12 publisher.
+if BENCHMARK_VARIANT is not None:
+    VARIANT_SOURCES = BENCHMARK_VARIANT["sources"]
+    VARIANT_REPO = Path(BENCHMARK_VARIANT["repo"])
+    VARIANT_BENCHMARK = str(
+        Path(BENCHMARK_VARIANT["benchmark"]) / "manifest.json"
+    )
+    VARIANT_STATISTICS = str(
+        Path(BENCHMARK_VARIANT["statistics"]) / "publication_manifest.json"
+    )
+    VARIANT_SPEC = str(BENCHMARK_VARIANT_SPEC)
+    VARIANT_LOG_ROOT = str(
+        Path(BENCHMARK_VARIANT_SPEC).parent
+    )
+
+    # Reuse published artifact files from other experiments without asking
+    # Snakemake to rerun their immutable producing rules.
+    if Path(VARIANT_BENCHMARK).is_file():
+        import hashlib
+        import json
+
+        with open(VARIANT_BENCHMARK, encoding="utf-8") as handle:
+            published = json.load(handle)
+        expected = BENCHMARK_VARIANT
+        source_hash = expected["source_hashes"]["m10c_manifest"]
+        if (
+            published.get("policy_sha256") != expected["policy_sha256"]
+            or published.get("m10c_manifest_sha256") != source_hash
+            or published.get("registry_sha256") != expected["registry_sha256"]
+        ):
+            raise ValueError("Existing variant benchmark provenance mismatch")
+
+    if Path(VARIANT_STATISTICS).is_file():
+        with open(VARIANT_STATISTICS, encoding="utf-8") as handle:
+            diagnostic = json.load(handle)
+        with open(VARIANT_BENCHMARK, "rb") as handle:
+            benchmark_manifest_hash = hashlib.sha256(handle.read()).hexdigest()
+        if diagnostic.get("benchmark_manifest_sha256") != benchmark_manifest_hash:
+            raise ValueError("Existing diagnostic references another benchmark")
+
+    if not Path(VARIANT_BENCHMARK).is_file():
+        rule publish_stage_08_benchmark_variant:
+            input:
+                m10c_manifest=VARIANT_SOURCES["m10c_manifest"],
+                m8_summary=VARIANT_SOURCES["m8_summary"],
+                original_targets=VARIANT_SOURCES["targets"],
+                stage01_targets=VARIANT_SOURCES["stage01"],
+                ontology=VARIANT_SOURCES["ontology"],
+                policy=BENCHMARK_VARIANT["policy"],
+                registry=BENCHMARK_VARIANT["registry"],
+                experiment_spec=VARIANT_SPEC,
+                cli=str(VARIANT_REPO / "scripts/pipeline/08_build_benchmark_v2.py"),
+                module=str(VARIANT_REPO / "src/probe/stage08_temporal_v2.py"),
+                variant_module=str(VARIANT_REPO / "src/probe/stage08_variants.py"),
+                runner=str(
+                    VARIANT_REPO
+                    / "workflow/scripts/run_stage_08_benchmark_variant.py"
+                )
+            output:
+                benchmark_manifest=VARIANT_BENCHMARK
+            log:
+                str(Path(VARIANT_LOG_ROOT) / "benchmark_execution.log")
+            params:
+                spec_path=VARIANT_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_benchmark_variant.py"
+
+    if not Path(VARIANT_STATISTICS).is_file():
+        rule publish_stage_08_diagnostics_variant:
+            input:
+                benchmark_manifest=VARIANT_BENCHMARK,
+                original_targets=VARIANT_SOURCES["targets"],
+                stage01_targets=VARIANT_SOURCES["stage01"],
+                experiment_spec=VARIANT_SPEC,
+                cli=str(VARIANT_REPO / "scripts/pipeline/08_profile_benchmark.py"),
+                variant_module=str(VARIANT_REPO / "src/probe/stage08_variants.py"),
+                runner=str(
+                    VARIANT_REPO
+                    / "workflow/scripts/run_stage_08_diagnostics_variant.py"
+                )
+            output:
+                diagnostics_manifest=VARIANT_STATISTICS
+            log:
+                str(Path(VARIANT_LOG_ROOT) / "diagnostics_execution.log")
+            params:
+                spec_path=VARIANT_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_diagnostics_variant.py"
+
+    rule stage_08_variant_diagnostics:
+        input:
+            VARIANT_STATISTICS
 
 rule validate_artifacts:
     input:
