@@ -1,0 +1,61 @@
+{
+  "schema_version": "stage08-temporal-eval-skip-policy-v1",
+  "benchmark_mode": "novel_acquisition",
+  "not_precedence": "not_is_fp",
+  "not_roles": ["START", "END"],
+  "scoring_scope": "target_aspects_with_eval",
+  "evidence_selections": {
+    "schema_version": "probe-evidence-selections-v1",
+    "registry_id": "probe-legacy-evidence-snapshot-v1",
+    "profiles": {
+      "experimental_all": {
+        "include_groups": [
+          "legacy_experimental_traditional",
+          "legacy_experimental_high_throughput"
+        ],
+        "include_codes": [],
+        "exclude_codes": []
+      },
+      "prior_including_electronic": {
+        "include_groups": [
+          "legacy_experimental_traditional",
+          "legacy_experimental_high_throughput",
+          "legacy_phylogenetic_curated",
+          "legacy_computational_curated",
+          "legacy_traceable_curated_statement",
+          "legacy_electronic"
+        ],
+        "include_codes": [],
+        "exclude_codes": []
+      },
+      "neutral_curated_and_electronic": {
+        "include_groups": [
+          "legacy_phylogenetic_curated",
+          "legacy_computational_curated",
+          "legacy_traceable_curated_statement",
+          "legacy_electronic"
+        ],
+        "include_codes": [],
+        "exclude_codes": []
+      },
+      "not_all_selected": {
+        "include_groups": [
+          "legacy_experimental_traditional",
+          "legacy_experimental_high_throughput",
+          "legacy_phylogenetic_curated",
+          "legacy_computational_curated",
+          "legacy_traceable_curated_statement",
+          "legacy_electronic"
+        ],
+        "include_codes": [],
+        "exclude_codes": []
+      }
+    },
+    "purposes": {
+      "score": "experimental_all",
+      "prior": "prior_including_electronic",
+      "neutral": "neutral_curated_and_electronic",
+      "not": "not_all_selected"
+    }
+  }
+}
