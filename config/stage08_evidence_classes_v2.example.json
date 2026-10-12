@@ -1,0 +1,32 @@
+{
+  "schema_version": "stage08-evidence-classes-v1",
+  "registry_id": "probe-legacy-evidence-snapshot-v1",
+  "scoring_scope": "target_aspects_with_eval",
+  "negative_policy": "evidence_sensitive_neutral",
+  "assessment_mode": "acquisition_and_confirmation",
+  "classes": {
+    "SCORE": {
+      "include_groups": [
+        "legacy_experimental_traditional",
+        "legacy_experimental_high_throughput"
+      ],
+      "include_codes": [],
+      "exclude_codes": []
+    },
+    "NON_SCORE": {
+      "include_groups": [
+        "legacy_phylogenetic_curated",
+        "legacy_computational_curated",
+        "legacy_traceable_curated_statement",
+        "legacy_electronic"
+      ],
+      "include_codes": [],
+      "exclude_codes": []
+    },
+    "EXCLUDED": {
+      "include_groups": ["legacy_unusable"],
+      "include_codes": [],
+      "exclude_codes": []
+    }
+  }
+}
