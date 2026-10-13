@@ -15,6 +15,19 @@ if BENCHMARK_VARIANT_SPEC is not None:
 else:
     BENCHMARK_VARIANT = None
 
+# Opt-in Stage 07 resolver experiments never replace canonical stage outputs.
+RESOLVER_VARIANT_SPEC = config.pop("resolver_variant_spec", None)
+if RESOLVER_VARIANT_SPEC is not None:
+    from probe.stage07_variants import read_spec
+
+    RESOLVER_VARIANT = read_spec(Path(RESOLVER_VARIANT_SPEC))
+    config["resolver"] = RESOLVER_VARIANT["policy"]["resolver"]
+    config["annotation_donor"] = (
+        RESOLVER_VARIANT["policy"]["annotation_donor"]
+    )
+else:
+    RESOLVER_VARIANT = None
+
 cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07", "08"}
 
@@ -1268,6 +1281,146 @@ if BENCHMARK_VARIANT is not None:
     rule stage_08_variant_diagnostics:
         input:
             VARIANT_STATISTICS
+
+# Stage 07 resolver variants are separate immutable publications. Only the
+# opt-in variant targets are allowed by their manager; canonical rules are
+# excluded from its Snakemake DAG.
+if RESOLVER_VARIANT is not None:
+    from probe.stage07_variants import verify_publications
+
+    RV = RESOLVER_VARIANT
+    verify_publications(RV)
+    RV_PATH = RV["paths"]
+    RV_SPEC = str(RESOLVER_VARIANT_SPEC)
+    RV_LOGS = str(
+        Path(RV["run"]) / "experiments" / RV["experiment_id"]
+    )
+
+    if not (Path(RV_PATH["stage07"]) / "manifest.json").is_file():
+        rule stage_07_resolver_variant:
+            input:
+                targets_manifest=bundle("01"),
+                primary_manifest=bundle("05A2"),
+                audit_manifest=bundle("05C2"),
+                start_taxonomy_manifest=bundle("02B", "START"),
+                end_taxonomy_manifest=bundle("02B", "END"),
+                start_anchors_manifest=bundle("04B", "START"),
+                end_anchors_manifest=bundle("04B", "END"),
+                lineage_index_manifest=bundle("04D1"),
+                start_lineage_manifest=bundle("04D2", "START"),
+                end_lineage_manifest=bundle("04D2", "END"),
+                jobs_manifest=bundle("06A"),
+                alignments_manifest=bundle("06C1"),
+                implementation_script=STAGE07_CLI_SCRIPT,
+                runner_script=STAGE07_RUNNER_SCRIPT,
+                resolver_modules=STAGE07_IMPLEMENTATION_MODULES
+            output:
+                str(Path(RV_PATH["stage07"]) / "manifest.json")
+            log:
+                str(Path(RV_LOGS) / "resolver_stage07.log")
+            params:
+                work_root=cfg.data["locations"]["work"],
+                results_root=cfg.data["locations"]["output"],
+                publication_root=cfg.data["locations"]["output"],
+                start_release_id=RV["releases"]["START"],
+                end_release_id=RV["releases"]["END"],
+                stage07_policy=RV["policy"],
+                resolver_variant_spec=RV_SPEC
+            threads:
+                cfg.resources("07")["threads"]
+            resources:
+                mem_mb=cfg.resources("07")["mem_mb"],
+                runtime=cfg.resources("07")["runtime_minutes"]
+            script:
+                "scripts/run_stage_07.py"
+
+    if not (Path(RV_PATH["stage08"]) / "manifest.json").is_file():
+        rule stage_08_resolver_variant:
+            input:
+                stage07_manifest=str(
+                    Path(RV_PATH["stage07"]) / "manifest.json"
+                ),
+                start_goa_manifest=bundle("01B1", "START"),
+                end_goa_manifest=bundle("01B1", "END"),
+                go_policy_manifest=bundle("01B0"),
+                spec=RV_SPEC
+            output:
+                str(Path(RV_PATH["stage08"]) / "manifest.json")
+            log:
+                str(Path(RV_LOGS) / "resolver_stage08.log")
+            params:
+                spec_path=RV_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_resolver_variant.py"
+
+    if not (Path(RV_PATH["m10c"]) / "manifest.json").is_file():
+        rule stage_08_compact_resolver_variant:
+            input:
+                stage07_manifest=str(
+                    Path(RV_PATH["stage07"]) / "manifest.json"
+                ),
+                m8_manifest=str(
+                    Path(RV_PATH["stage08"]) / "manifest.json"
+                ),
+                spec=RV_SPEC
+            output:
+                str(Path(RV_PATH["m10c"]) / "manifest.json")
+            log:
+                str(Path(RV_LOGS) / "resolver_m10c.log")
+            params:
+                spec_path=RV_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_compact_resolver_variant.py"
+
+    if not (Path(RV_PATH["benchmark"]) / "manifest.json").is_file():
+        rule stage_08_benchmark_resolver_variant:
+            input:
+                m10c_manifest=str(
+                    Path(RV_PATH["m10c"]) / "manifest.json"
+                ),
+                m8_summary=str(
+                    Path(RV_PATH["stage08"]) / "08_collection_summary.json"
+                ),
+                spec=RV_SPEC
+            output:
+                str(Path(RV_PATH["benchmark"]) / "manifest.json")
+            log:
+                str(Path(RV_LOGS) / "resolver_m12.log")
+            params:
+                spec_path=RV_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_benchmark_resolver_variant.py"
+
+    if not (
+        Path(RV_PATH["diagnostics"]) / "publication_manifest.json"
+    ).is_file():
+        rule stage_08_diagnostics_resolver_variant:
+            input:
+                benchmark_manifest=str(
+                    Path(RV_PATH["benchmark"]) / "manifest.json"
+                ),
+                spec=RV_SPEC
+            output:
+                str(
+                    Path(RV_PATH["diagnostics"])
+                    / "publication_manifest.json"
+                )
+            log:
+                str(Path(RV_LOGS) / "resolver_diagnostics.log")
+            params:
+                spec_path=RV_SPEC
+            threads: 1
+            script:
+                "scripts/run_stage_08_diagnostics_resolver_variant.py"
+
+    rule stage_08_resolver_diagnostics:
+        input:
+            str(
+                Path(RV_PATH["diagnostics"]) / "publication_manifest.json"
+            )
 
 rule validate_artifacts:
     input:

@@ -487,11 +487,27 @@ def run() -> None:
         raise ValueError("07 publication root must be a physical directory")
 
     destination = Path(context.output[0]).parent
-    expected_destination = publication_root.resolve() / "common/07"
+    variant_spec = getattr(context.params, "resolver_variant_spec", None)
+    if variant_spec is None:
+        expected_destination = publication_root.resolve() / "common/07"
+    else:
+        from probe.stage07_variants import read_spec
+
+        variant = read_spec(Path(variant_spec))
+        if variant["policy"] != policy_data:
+            raise ValueError("07 variant policy differs from resolved spec")
+        expected_destination = Path(variant["paths"]["stage07"])
+        if publication_root.resolve() not in expected_destination.parents:
+            raise ValueError("07 variant publication escaped results root")
 
     if destination.resolve() != expected_destination.resolve():
         raise ValueError("07 unexpected publication destination")
-
+    if (
+        variant_spec is not None
+        and destination.exists()
+        and (destination.is_symlink() or any(destination.iterdir()))
+    ):
+        raise FileExistsError("07 variant refuses nonempty destination")
     check_publication_destination(destination)
 
     validated = {}
