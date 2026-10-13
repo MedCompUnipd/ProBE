@@ -142,7 +142,7 @@ def preflight_candidate_scan(
 ) -> CandidateScanPreflight:
     """Validate scanner inputs and classify target taxonomy eligibility."""
 
-    if taxonomy_policy not in {"rank_aware", "strict_taxon"}:
+    if taxonomy_policy not in {"rank_aware", "strict_taxon", "species_wide"}:
         raise ValueError(f"unknown taxonomy_policy {taxonomy_policy!r}")
 
     targets = _load_unique_rows(

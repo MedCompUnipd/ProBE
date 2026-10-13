@@ -28,6 +28,33 @@ if RESOLVER_VARIANT_SPEC is not None:
 else:
     RESOLVER_VARIANT = None
 
+# Optional Stage 2C discovery branch; never rewrites canonical Stage 03.
+S2C_SPEC_PATH = config.pop("stage2c_discovery_spec", None)
+if S2C_SPEC_PATH is not None:
+    from probe.stage2c_discovery import read_plan
+
+    S2C_PLAN = read_plan(Path(S2C_SPEC_PATH))
+else:
+    S2C_PLAN = None
+
+# Independent FULL UniProt exact discovery; no resolver policy in this plan.
+S2C_FULL_SPEC_PATH = config.pop("stage2c_full_exact_spec", None)
+if S2C_FULL_SPEC_PATH is not None:
+    from probe.stage2c_full_exact import read_plan as read_full_exact_plan
+
+    S2C_FULL_PLAN = read_full_exact_plan(Path(S2C_FULL_SPEC_PATH))
+else:
+    S2C_FULL_PLAN = None
+
+# Optional Stage 2C union (no donor-policy configuration).
+S2C_UNION_SPEC_PATH = config.pop("stage2c_union_spec", None)
+if S2C_UNION_SPEC_PATH is not None:
+    from probe.stage2c_union_plan import read_plan as read_union_plan
+
+    S2C_UNION_PLAN = read_union_plan(Path(S2C_UNION_SPEC_PATH))
+else:
+    S2C_UNION_PLAN = None
+
 cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07", "08"}
 
@@ -1465,3 +1492,251 @@ rule validate_artifacts:
         deep=cfg.data["validation"]["deep_checksums"]
     script:
         "scripts/validate_bundles.py"
+
+
+# Stage 2C species-wide GO-positive discovery is an opt-in, isolated branch.
+# It does not yet include FULL UniProt exact matches or a downstream merge.
+if S2C_PLAN is not None:
+    S2C_BINARY = str(
+        PROJECT_ROOT
+        / ".pixi/build/probe-primary-candidate-scan-v2"
+        / "probe-primary-candidate-scan-v2"
+    )
+    S2C_BUILD_INPUTS = [
+        str(PROJECT_ROOT / "cpp/CMakeLists.txt"),
+        str(PROJECT_ROOT / "cpp/src/probe_primary_candidate_scan_v2.cpp"),
+        str(PROJECT_ROOT / "pixi.toml"),
+        str(PROJECT_ROOT / "pixi.lock"),
+    ]
+
+    rule build_primary_candidate_scan_v2:
+        input:
+            S2C_BUILD_INPUTS
+        output:
+            S2C_BINARY
+        log:
+            str(Path(S2C_PLAN["run"]) / "logs/pipeline-v2/"
+                "build-primary-scan-v2.log")
+        params:
+            project_root=str(PROJECT_ROOT),
+            log_dir=str(Path(S2C_PLAN["run"]) / "logs/pipeline-v2")
+        shell:
+            "mkdir -p {params.log_dir:q} && "
+            "(cd {params.project_root:q} && "
+            "pixi run build-primary-candidate-scan-v2) "
+            "> {log:q} 2>&1"
+
+    rule stage_03_species_wide_START:
+        input:
+            target_manifest=bundle("01"),
+            go_positive_manifest=bundle("01C", "START"),
+            taxonomy_manifest=bundle("02B", "START"),
+            binary=S2C_BINARY
+        output:
+            str(Path(S2C_PLAN["paths"]["START"]) / "manifest.json")
+        log:
+            str(Path(S2C_PLAN["run"]) / "logs/pipeline-v2/"
+                f"species-wide-START-{S2C_PLAN['key'][:16]}.log")
+        params:
+            stage="03",
+            role="START",
+            plan_path=str(S2C_SPEC_PATH)
+        threads:
+            cfg.resources("03")["threads"]
+        resources:
+            mem_mb=cfg.resources("03")["mem_mb"],
+            runtime=cfg.resources("03")["runtime_minutes"]
+        script:
+            "scripts/run_stage_03_species_wide.py"
+
+    rule stage_03_species_wide_END:
+        input:
+            target_manifest=bundle("01"),
+            go_positive_manifest=bundle("01C", "END"),
+            taxonomy_manifest=bundle("02B", "END"),
+            binary=S2C_BINARY
+        output:
+            str(Path(S2C_PLAN["paths"]["END"]) / "manifest.json")
+        log:
+            str(Path(S2C_PLAN["run"]) / "logs/pipeline-v2/"
+                f"species-wide-END-{S2C_PLAN['key'][:16]}.log")
+        params:
+            stage="03",
+            role="END",
+            plan_path=str(S2C_SPEC_PATH)
+        threads:
+            cfg.resources("03")["threads"]
+        resources:
+            mem_mb=cfg.resources("03")["mem_mb"],
+            runtime=cfg.resources("03")["runtime_minutes"]
+        script:
+            "scripts/run_stage_03_species_wide.py"
+
+    rule stage_03_species_wide_both:
+        input:
+            str(Path(S2C_PLAN["paths"]["START"]) / "manifest.json"),
+            str(Path(S2C_PLAN["paths"]["END"]) / "manifest.json")
+
+# Stage 2C FULL exact discovery is a separate optional, immutable branch.
+# Unlike the GO-positive species-wide scanner, it reads pinned 01A_FULL.
+# Neither candidate discovery branch depends on the Stage 07 donor policy.
+if S2C_FULL_PLAN is not None:
+    S2C_FULL_BINARY = str(
+        PROJECT_ROOT
+        / ".pixi/build/probe-full-exact-cross-strain"
+        / "probe-full-exact-cross-strain-v1"
+    )
+    S2C_FULL_BUILD_INPUTS = [
+        str(PROJECT_ROOT / "cpp/CMakeLists.txt"),
+        str(PROJECT_ROOT / "cpp/src/probe_full_exact_cross_strain_v1.cpp"),
+        str(PROJECT_ROOT / "pixi.toml"),
+        str(PROJECT_ROOT / "pixi.lock"),
+    ]
+
+    rule build_full_exact_cross_strain_v1:
+        input:
+            S2C_FULL_BUILD_INPUTS
+        output:
+            S2C_FULL_BINARY
+        log:
+            str(Path(S2C_FULL_PLAN["run"]) / "logs/pipeline-v2/"
+                "build-full-exact-cross-strain-v1.log")
+        params:
+            project_root=str(PROJECT_ROOT),
+            log_dir=str(Path(S2C_FULL_PLAN["run"]) / "logs/pipeline-v2")
+        shell:
+            "mkdir -p {params.log_dir:q} && "
+            "(cd {params.project_root:q} && "
+            "pixi run build-full-exact-cross-strain) "
+            "> {log:q} 2>&1"
+
+    rule stage_03_full_exact_START:
+        input:
+            target_manifest=bundle("01"),
+            full_manifest=bundle("01A_FULL", "START"),
+            taxonomy_manifest=bundle("02B", "START"),
+            ox_manifest=bundle("04D0b", "START"),
+            binary=S2C_FULL_BINARY
+        output:
+            str(Path(S2C_FULL_PLAN["paths"]["START"]) / "manifest.json")
+        log:
+            str(Path(S2C_FULL_PLAN["run"]) / "logs/pipeline-v2/"
+                f"full-exact-START-{S2C_FULL_PLAN['key'][:16]}.log")
+        params:
+            role="START",
+            plan_path=str(S2C_FULL_SPEC_PATH)
+        threads:
+            cfg.resources("03")["threads"]
+        resources:
+            mem_mb=cfg.resources("03")["mem_mb"],
+            runtime=cfg.resources("03")["runtime_minutes"]
+        script:
+            "scripts/run_stage_03_full_exact.py"
+
+    rule stage_03_full_exact_END:
+        input:
+            target_manifest=bundle("01"),
+            full_manifest=bundle("01A_FULL", "END"),
+            taxonomy_manifest=bundle("02B", "END"),
+            ox_manifest=bundle("04D0b", "END"),
+            binary=S2C_FULL_BINARY
+        output:
+            str(Path(S2C_FULL_PLAN["paths"]["END"]) / "manifest.json")
+        log:
+            str(Path(S2C_FULL_PLAN["run"]) / "logs/pipeline-v2/"
+                f"full-exact-END-{S2C_FULL_PLAN['key'][:16]}.log")
+        params:
+            role="END",
+            plan_path=str(S2C_FULL_SPEC_PATH)
+        threads:
+            cfg.resources("03")["threads"]
+        resources:
+            mem_mb=cfg.resources("03")["mem_mb"],
+            runtime=cfg.resources("03")["runtime_minutes"]
+        script:
+            "scripts/run_stage_03_full_exact.py"
+
+    rule stage_03_full_exact_both:
+        input:
+            str(Path(S2C_FULL_PLAN["paths"]["START"]) / "manifest.json"),
+            str(Path(S2C_FULL_PLAN["paths"]["END"]) / "manifest.json")
+
+# Stage 2C union: shared species-wide discovery independent of donor policy.
+# Scientific upstream branches remain pinned and are not overwritten.
+if S2C_UNION_PLAN is not None:
+    if S2C_PLAN is None or S2C_FULL_PLAN is None:
+        raise ValueError("Stage 2C union requires both discovery plans")
+    if (
+        S2C_UNION_PLAN["species_key"] != S2C_PLAN["key"]
+        or S2C_UNION_PLAN["full_key"] != S2C_FULL_PLAN["key"]
+        or S2C_UNION_PLAN["species_paths"] != S2C_PLAN["paths"]
+        or S2C_UNION_PLAN["full_paths"] != S2C_FULL_PLAN["paths"]
+    ):
+        raise ValueError("Stage 2C union/discovery plan mismatch")
+
+    rule stage_03_discovery_union_START:
+        input:
+            go_manifest=str(
+                Path(S2C_PLAN["paths"]["START"]) / "manifest.json"
+            ),
+            full_manifest=str(
+                Path(S2C_FULL_PLAN["paths"]["START"]) / "manifest.json"
+            ),
+            taxonomy_manifest=bundle("02B", "START")
+        output:
+            union_manifest=str(
+                Path(S2C_UNION_PLAN["paths"]["START"]) / "manifest.json"
+            ),
+            pairs=str(
+                Path(S2C_UNION_PLAN["paths"]["START"])
+                / "03_unified_discovery.tsv"
+            ),
+            summary=str(
+                Path(S2C_UNION_PLAN["paths"]["START"])
+                / "03_unified_discovery.summary.json"
+            )
+        log:
+            str(Path(S2C_UNION_PLAN["run"]) / "logs/pipeline-v2/"
+                f"discovery-union-START-{S2C_UNION_PLAN['key'][:16]}.log")
+        params:
+            role="START",
+            plan_path=str(S2C_UNION_SPEC_PATH)
+        threads: 1
+        script:
+            "scripts/run_stage_03_discovery_union.py"
+
+    rule stage_03_discovery_union_END:
+        input:
+            go_manifest=str(
+                Path(S2C_PLAN["paths"]["END"]) / "manifest.json"
+            ),
+            full_manifest=str(
+                Path(S2C_FULL_PLAN["paths"]["END"]) / "manifest.json"
+            ),
+            taxonomy_manifest=bundle("02B", "END")
+        output:
+            union_manifest=str(
+                Path(S2C_UNION_PLAN["paths"]["END"]) / "manifest.json"
+            ),
+            pairs=str(
+                Path(S2C_UNION_PLAN["paths"]["END"])
+                / "03_unified_discovery.tsv"
+            ),
+            summary=str(
+                Path(S2C_UNION_PLAN["paths"]["END"])
+                / "03_unified_discovery.summary.json"
+            )
+        log:
+            str(Path(S2C_UNION_PLAN["run"]) / "logs/pipeline-v2/"
+                f"discovery-union-END-{S2C_UNION_PLAN['key'][:16]}.log")
+        params:
+            role="END",
+            plan_path=str(S2C_UNION_SPEC_PATH)
+        threads: 1
+        script:
+            "scripts/run_stage_03_discovery_union.py"
+
+    rule stage_03_discovery_union_both:
+        input:
+            str(Path(S2C_UNION_PLAN["paths"]["START"]) / "manifest.json"),
+            str(Path(S2C_UNION_PLAN["paths"]["END"]) / "manifest.json")

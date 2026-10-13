@@ -39,6 +39,11 @@ add_executable(
 )
 
 add_executable(
+    probe-primary-candidate-scan-v2
+    src/probe_primary_candidate_scan_v2.cpp
+)
+
+add_executable(
     probe-direct-accession-anchors-v1
     src/probe_direct_accession_anchors_v1.cpp
 )
@@ -60,4 +65,9 @@ add_executable(
 target_link_libraries(
     probe-directional-glocal-full-dp-v1
     PRIVATE OpenMP::OpenMP_CXX
+)
+
+add_executable(
+    probe-full-exact-cross-strain-v1
+    src/probe_full_exact_cross_strain_v1.cpp
 )
