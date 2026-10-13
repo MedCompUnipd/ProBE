@@ -212,6 +212,31 @@ def _keys(policy: dict, baseline: dict) -> dict[str, str]:
     )
 
 
+def verify_canonical_go(
+    stage07: dict,
+    m8: dict,
+    m10c: dict,
+    checksum: str,
+) -> None:
+    """Check GO provenance at the stages that actually depend on GO."""
+    if stage07.get("stage") != "07" or m8.get("stage") != "08":
+        raise ValueError("Unexpected canonical Stage 07 or M8 manifest")
+    if "ontology" not in stage07:
+        raise ValueError("Missing Stage 07 ontology provenance field")
+    declared = stage07["ontology"]
+    if declared is not None and (
+        not isinstance(declared, dict) or declared.get("sha256") != checksum
+    ):
+        raise ValueError("Canonical Stage 07 GO provenance mismatch")
+    m8_go = m8.get("ontology")
+    if not isinstance(m8_go, dict) or m8_go.get("sha256") != checksum:
+        raise ValueError("Canonical M8 GO provenance mismatch")
+    if m10c.get("schema_version") != "stage08-m10c-compact-interpretation-v1":
+        raise ValueError("Unexpected canonical M10c manifest schema")
+    if m10c.get("ontology_sha256") != checksum:
+        raise ValueError("Canonical M10c GO provenance mismatch")
+
+
 def _baseline(run: Path) -> tuple[Path, Path, str, str]:
     from probe.stage08_variants import read_spec
 
@@ -273,8 +298,10 @@ def create(repo: Path, run: Path, name: str, policy: dict) -> dict:
         ontology_path = run / ontology_path
     ontology = safe_input_file(ontology_path)
     go_sha = sha256(ontology)
-    if go_sha != canonical.get("ontology", {}).get("sha256"):
-        raise ValueError("GO differs from published Stage 07")
+    common = run / "results/pipeline-v2/common"
+    m8 = _json(safe_input_file(common / "08/manifest.json"))
+    m10c = _json(safe_input_file(common / "08_interpret_compact/manifest.json"))
+    verify_canonical_go(canonical, m8, m10c, go_sha)
     if go_sha != "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666":
         raise ValueError("Unexpected frozen ontology")
     evidence, registry, evidence_sha, registry_sha = _baseline(run)
@@ -485,7 +512,13 @@ def verify_publications(spec: dict) -> dict[str, bool]:
             or manifest.parameters.get("policies") != spec["policy"]
             or manifest.parameters.get("start_release_id") != spec["releases"]["START"]
             or manifest.parameters.get("end_release_id") != spec["releases"]["END"]
-            or manifest.ontology.get("sha256") != spec["ontology_sha256"]
+            or (
+                manifest.ontology is not None
+                and (
+                    not isinstance(manifest.ontology, dict)
+                    or manifest.ontology.get("sha256") != spec["ontology_sha256"]
+                )
+            )
         ):
             raise ValueError("Published Stage 07 resolver variant is incompatible")
     if found["stage08"]:

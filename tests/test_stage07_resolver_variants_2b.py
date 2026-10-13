@@ -16,7 +16,9 @@ from probe.stage07_variants import (
     safe_file,
     safe_input_file,
     sha256,
+    verify_canonical_go,
     verify_input_file,
+    verify_publications,
 )
 
 
@@ -234,3 +236,84 @@ def test_source_manifest_links_preserve_alias(tmp_path: Path) -> None:
         expected = run / role / "pipeline-v2" / relative / "manifest.json"
         assert sources[name] == str(expected)
         assert safe_input_file(Path(sources[name])) == physical.resolve()
+
+
+def _canonical_manifest_examples() -> tuple[dict, dict, dict]:
+    checksum = "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666"
+    stage07 = {"stage": "07", "ontology": None}
+    m8 = {"stage": "08", "ontology": {"sha256": checksum}}
+    m10c = {
+        "schema_version": "stage08-m10c-compact-interpretation-v1",
+        "ontology_sha256": checksum,
+    }
+    return stage07, m8, m10c
+
+
+def test_canonical_stage07_null_ontology_is_supported() -> None:
+    stage07, m8, m10c = _canonical_manifest_examples()
+    verify_canonical_go(stage07, m8, m10c, m10c["ontology_sha256"])
+
+
+def test_canonical_go_rejects_inconsistent_m8() -> None:
+    stage07, m8, m10c = _canonical_manifest_examples()
+    m8["ontology"]["sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="Canonical M8 GO"):
+        verify_canonical_go(stage07, m8, m10c, m10c["ontology_sha256"])
+
+
+def test_canonical_go_rejects_inconsistent_m10c() -> None:
+    stage07, m8, m10c = _canonical_manifest_examples()
+    m10c["ontology_sha256"] = "0" * 64
+    with pytest.raises(ValueError, match="Canonical M10c GO"):
+        verify_canonical_go(stage07, m8, m10c, m8["ontology"]["sha256"])
+
+
+def test_canonical_go_rejects_invalid_stage07_provenance() -> None:
+    stage07, m8, m10c = _canonical_manifest_examples()
+    stage07["ontology"] = {"sha256": "0" * 64}
+    with pytest.raises(ValueError, match="Canonical Stage 07 GO"):
+        verify_canonical_go(stage07, m8, m10c, m10c["ontology_sha256"])
+
+
+def test_canonical_go_rejects_missing_stage07_field() -> None:
+    stage07, m8, m10c = _canonical_manifest_examples()
+    del stage07["ontology"]
+    with pytest.raises(ValueError, match="Missing Stage 07 ontology"):
+        verify_canonical_go(stage07, m8, m10c, m10c["ontology_sha256"])
+
+
+def test_published_stage07_accepts_null_ontology(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from types import SimpleNamespace
+
+    import probe.workflow.artifacts as artifacts
+    from probe.stage07_variants import OUTPUT_ROOTS
+
+    roots = {key: tmp_path / directory for key, directory in OUTPUT_ROOTS.items()}
+    roots["stage07"].mkdir()
+    (roots["stage07"] / "manifest.json").write_text("{}", encoding="utf-8")
+    policy_data = policy()
+    publication = SimpleNamespace(
+        stage="07",
+        parameters={
+            "policies": policy_data,
+            "start_release_id": "2023_01",
+            "end_release_id": "2026_03",
+        },
+        ontology=None,
+    )
+    monkeypatch.setattr(
+        artifacts, "validate_bundle", lambda *args, **kwargs: publication
+    )
+    spec = {
+        "paths": {key: str(value) for key, value in roots.items()},
+        "policy": policy_data,
+        "releases": {"START": "2023_01", "END": "2026_03"},
+        "ontology_sha256": (
+            "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666"
+        ),
+    }
+    found = verify_publications(spec)
+    assert found["stage07"] is True
+    assert all(not found[key] for key in found if key != "stage07")
