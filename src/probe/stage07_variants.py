@@ -104,9 +104,30 @@ def fingerprint(obj: object) -> str:
 
 
 def safe_file(path: Path) -> Path:
+    """Require a physical file for repository code and experiment metadata."""
     if path.is_symlink() or not path.is_file():
         raise ValueError(f"Not a physical regular file: {path}")
     return path.resolve(strict=True)
+
+
+def safe_input_file(path: Path) -> Path:
+    """Resolve input symlinks, including chains, to an existing regular file."""
+    try:
+        real = path.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ValueError(f"Missing or invalid input file: {path}") from exc
+    if not real.is_file():
+        raise ValueError(f"Not a regular input file: {path}")
+    return real
+
+
+def verify_input_file(path: Path, realpath: str, checksum: str) -> None:
+    """Fail closed if an input link changes target or payload."""
+    resolved = safe_input_file(path)
+    if str(resolved) != realpath:
+        raise ValueError(f"Input link destination changed: {path}")
+    if sha256(resolved) != checksum:
+        raise ValueError(f"Input content changed: {path}")
 
 
 def _json(path: Path) -> dict:
@@ -121,10 +142,12 @@ def _sources(run: Path) -> dict[str, str]:
         "work": run / "work/pipeline-v2",
         "results": run / "results/pipeline-v2",
     }
-    return {
-        name: str(safe_file(roots[root] / relative / "manifest.json"))
-        for name, (root, relative) in SOURCE_MANIFESTS.items()
-    }
+    found = {}
+    for name, (root, relative) in SOURCE_MANIFESTS.items():
+        path = roots[root] / relative / "manifest.json"
+        safe_input_file(path)
+        found[name] = str(path)
+    return found
 
 
 def _code(repo: Path) -> dict[str, str]:
@@ -213,7 +236,7 @@ def create(repo: Path, run: Path, name: str, policy: dict) -> dict:
         raise ValueError("Resolver policy requires exactly two groups")
     config_path = run / "pipeline.stage08.collection.yaml"
     base = yaml.safe_load((repo / "config/pipeline.yaml").read_text())
-    override = yaml.safe_load(safe_file(config_path).read_text())
+    override = yaml.safe_load(safe_input_file(config_path).read_text())
     from probe.stage08_variants import _merge
 
     resolved = _merge(base, override)
@@ -240,7 +263,7 @@ def create(repo: Path, run: Path, name: str, policy: dict) -> dict:
     ).strip()
     sources = _sources(run)
     hashes = {key: sha256(Path(path)) for key, path in sources.items()}
-    canonical = _json(Path(sources["canonical_stage07"]))
+    canonical = _json(safe_input_file(Path(sources["canonical_stage07"])))
     if canonical.get("parameters", {}).get("policies") != (
         original.stage07_parameters()
     ):
@@ -248,17 +271,17 @@ def create(repo: Path, run: Path, name: str, policy: dict) -> dict:
     ontology_path = Path(resolved["ontology"]["path"])
     if not ontology_path.is_absolute():
         ontology_path = run / ontology_path
-    ontology = safe_file(ontology_path)
+    ontology = safe_input_file(ontology_path)
     go_sha = sha256(ontology)
     if go_sha != canonical.get("ontology", {}).get("sha256"):
         raise ValueError("GO differs from published Stage 07")
     if go_sha != "42d7869b3a47cd4a9751d7f2f373acf737b64a1435e4b02b169d134b240dc666":
         raise ValueError("Unexpected frozen ontology")
     evidence, registry, evidence_sha, registry_sha = _baseline(run)
-    source_targets = (run / "inputs/targets.tsv").resolve(strict=True)
-    if not source_targets.is_file():
-        raise ValueError("Missing original target table")
-    stage01_targets = safe_file(run / "work/pipeline-v2/common/01/01_targets.tsv")
+    source_targets_path = run / "inputs/targets.tsv"
+    stage01_targets_path = run / "work/pipeline-v2/common/01/01_targets.tsv"
+    source_targets = safe_input_file(source_targets_path)
+    stage01_targets = safe_input_file(stage01_targets_path)
     code_hashes = _code(repo)
     spec = {
         "schema_version": SCHEMA,
@@ -268,12 +291,18 @@ def create(repo: Path, run: Path, name: str, policy: dict) -> dict:
         "policy": policy,
         "pipeline_config": resolved,
         "source_manifests": sources,
+        "source_manifest_realpaths": {
+            key: str(safe_input_file(Path(path))) for key, path in sources.items()
+        },
         "source_hashes": hashes,
         "code_hashes": code_hashes,
-        "ontology": str(ontology),
+        "ontology": str(ontology_path),
+        "ontology_realpath": str(ontology),
         "ontology_sha256": go_sha,
-        "target_file": str(source_targets),
-        "stage01_targets": str(stage01_targets),
+        "target_file": str(source_targets_path),
+        "target_realpath": str(source_targets),
+        "stage01_targets": str(stage01_targets_path),
+        "stage01_realpath": str(stage01_targets),
         "targets_sha256": sha256(source_targets),
         "stage01_sha256": sha256(stage01_targets),
         "evidence_policy": "",  # Set to experiment-owned snapshot below.
@@ -351,8 +380,11 @@ def read_spec(path: Path, *, check_sources: bool = True) -> dict:
             raise ValueError(f"Illegal resolver output destination: {name}")
     if check_sources:
         for name, path_str in spec["source_manifests"].items():
-            if sha256(safe_file(Path(path_str))) != spec["source_hashes"][name]:
-                raise ValueError(f"Upstream source changed: {name}")
+            verify_input_file(
+                Path(path_str),
+                spec["source_manifest_realpaths"][name],
+                spec["source_hashes"][name],
+            )
         repo = Path(spec["repo"])
         for rel, expected in spec["code_hashes"].items():
             if sha256(safe_file(repo / rel)) != expected:
@@ -361,22 +393,30 @@ def read_spec(path: Path, *, check_sources: bool = True) -> dict:
             raise ValueError("Evidence-policy snapshot location mismatch")
         if spec["registry"] != str(exp / "registry.json"):
             raise ValueError("Registry snapshot location mismatch")
+        for path_str, realpath, expected in (
+            (
+                spec["ontology"],
+                spec["ontology_realpath"],
+                spec["ontology_sha256"],
+            ),
+            (
+                spec["target_file"],
+                spec["target_realpath"],
+                spec["targets_sha256"],
+            ),
+            (
+                spec["stage01_targets"],
+                spec["stage01_realpath"],
+                spec["stage01_sha256"],
+            ),
+        ):
+            verify_input_file(Path(path_str), realpath, expected)
         for path_str, expected in (
-            (spec["ontology"], spec["ontology_sha256"]),
             (spec["evidence_policy"], spec["evidence_policy_sha256"]),
             (spec["registry"], spec["registry_sha256"]),
-            (spec["target_file"], spec["targets_sha256"]),
-            (spec["stage01_targets"], spec["stage01_sha256"]),
         ):
-            source = Path(path_str)
-            if source == Path(spec["target_file"]):
-                source = source.resolve(strict=True)
-                if not source.is_file():
-                    raise ValueError("Original target source is missing")
-            else:
-                source = safe_file(source)
-            if sha256(source) != expected:
-                raise ValueError(f"Experiment source content changed: {path_str}")
+            if sha256(safe_file(Path(path_str))) != expected:
+                raise ValueError(f"Experiment snapshot changed: {path_str}")
     return spec
 
 

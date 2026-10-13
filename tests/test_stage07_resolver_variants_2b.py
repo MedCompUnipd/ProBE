@@ -9,9 +9,14 @@ import pytest
 from probe.stage07_variants import (
     CODE_GROUPS,
     SCHEMA,
+    SOURCE_MANIFESTS,
     _keys,
+    _sources,
     read_spec,
+    safe_file,
+    safe_input_file,
     sha256,
+    verify_input_file,
 )
 
 
@@ -155,3 +160,77 @@ def test_full_execution_requires_authorization(tmp_path: Path) -> None:
     spec = {"run": str(tmp_path), "experiment_id": "test-alpha"}
     with pytest.raises(ValueError, match="authorize-goa-scan"):
         module._run(spec, full=True, execute=True, authorized=False)
+
+
+def test_input_link_chain_uses_target_contents(tmp_path: Path) -> None:
+    original = tmp_path / "frozen.owl"
+    original.write_bytes(b"pinned-go")
+    first = tmp_path / "first.owl"
+    second = tmp_path / "second.owl"
+    first.symlink_to(original)
+    second.symlink_to(first)
+    assert safe_input_file(second) == original.resolve()
+    verify_input_file(second, str(original.resolve()), sha256(original))
+
+
+def test_input_link_retargeting_is_rejected(tmp_path: Path) -> None:
+    original = tmp_path / "original.owl"
+    alternate = tmp_path / "alternate.owl"
+    original.write_bytes(b"same-content")
+    alternate.write_bytes(b"same-content")
+    linked = tmp_path / "go.owl"
+    linked.symlink_to(original)
+    checksum = sha256(original)
+    verify_input_file(linked, str(original.resolve()), checksum)
+    linked.unlink()
+    linked.symlink_to(alternate)
+    with pytest.raises(ValueError, match="destination changed"):
+        verify_input_file(linked, str(original.resolve()), checksum)
+
+
+def test_input_link_content_mutation_is_rejected(tmp_path: Path) -> None:
+    actual = tmp_path / "target.tsv"
+    actual.write_bytes(b"original")
+    linked = tmp_path / "alias.tsv"
+    linked.symlink_to(actual)
+    checksum = sha256(actual)
+    actual.write_bytes(b"mutated")
+    with pytest.raises(ValueError, match="content changed"):
+        verify_input_file(linked, str(actual.resolve()), checksum)
+
+
+def test_dangling_and_directory_links_are_rejected(tmp_path: Path) -> None:
+    missing = tmp_path / "missing"
+    dangling = tmp_path / "dangling"
+    dangling.symlink_to(missing)
+    with pytest.raises(ValueError, match="Missing or invalid"):
+        safe_input_file(dangling)
+    folder = tmp_path / "folder"
+    folder.mkdir()
+    folder_link = tmp_path / "folder_link"
+    folder_link.symlink_to(folder, target_is_directory=True)
+    with pytest.raises(ValueError, match="regular input"):
+        safe_input_file(folder_link)
+    actual = tmp_path / "metadata.json"
+    actual.write_text("{}", encoding="utf-8")
+    metadata_link = tmp_path / "metadata_link.json"
+    metadata_link.symlink_to(actual)
+    with pytest.raises(ValueError, match="physical regular"):
+        safe_file(metadata_link)
+
+
+def test_source_manifest_links_preserve_alias(tmp_path: Path) -> None:
+    run = tmp_path / "run"
+    physical = tmp_path / "published-manifest.json"
+    physical.write_text("{}", encoding="utf-8")
+    for role, relative in SOURCE_MANIFESTS.values():
+        path = run / ("work" if role == "work" else "results")
+        path = path / "pipeline-v2" / relative / "manifest.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.symlink_to(physical)
+    sources = _sources(run)
+    assert len(sources) == len(SOURCE_MANIFESTS)
+    for name, (role, relative) in SOURCE_MANIFESTS.items():
+        expected = run / role / "pipeline-v2" / relative / "manifest.json"
+        assert sources[name] == str(expected)
+        assert safe_input_file(Path(sources[name])) == physical.resolve()
