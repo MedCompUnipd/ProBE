@@ -1345,7 +1345,12 @@ if RESOLVER_VARIANT is not None:
                 go_policy_manifest=bundle("01B0"),
                 spec=RV_SPEC
             output:
-                str(Path(RV_PATH["stage08"]) / "manifest.json")
+                stage08_manifest=str(
+                    Path(RV_PATH["stage08"]) / "manifest.json"
+                ),
+                stage08_summary=str(
+                    Path(RV_PATH["stage08"]) / "08_collection_summary.json"
+                )
             log:
                 str(Path(RV_LOGS) / "resolver_stage08.log")
             params:
