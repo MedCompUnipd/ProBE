@@ -17,7 +17,22 @@ release IDs are supplied through configuration.
 
 ---
 
-## Global frozen scientific policy
+## Scope of historical canonical policy and Stage 2C variants
+
+The original canonical Stage 01–07 rules below describe a historical baseline.
+They are not the final Stage 2C EXACT donor contract. As of 2026-10-16, the
+normative scientific variant is defined in
+[`PROBE_STAGE2C_EXACT_DONOR_CONTRACT_V1.md`](PROBE_STAGE2C_EXACT_DONOR_CONTRACT_V1.md).
+For Stage 2C, literal EXACT same-TaxID PRIMARY candidates require no locus,
+and the `same_species_exact` policy also permits exact verified same-species
+cross-TaxID donors. Cross-TaxID NONEXACT never enters DP. This does **not**
+rewrite canonical Stage 07 publications or silently change canonical workflow
+outputs. The Stage 2C DAG is isolated and opt-in, with a single shared
+candidate/discovery/DP chain and two policy-specific resolvers. Stage 08
+consumption uses a separately validated adapter; downstream processing is
+not automatically wired into this optional Snakemake DAG.
+
+## Global frozen scientific policy (historical canonical baseline)
 
 ### Target sequence search
 

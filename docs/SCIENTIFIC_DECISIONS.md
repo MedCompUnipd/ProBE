@@ -2,8 +2,11 @@
 
 ## Status and scope
 
-The authoritative implementation is branch `codex/modifiche-main`. The historical
-ProBE codebase is out of scope; only `reference/owlLibrary3.py` is retained as
+Scientific rules are versioned with the implementation and must not be
+inferred from a historical branch name. The Stage 2C EXACT donor rules are
+normative in `docs/PROBE_STAGE2C_EXACT_DONOR_CONTRACT_V1.md` (frozen on
+2026-10-16); the frozen canonical Stage 07 and its publications remain a
+separate, historical implementation. `reference/owlLibrary3.py` remains
 optional ontology reference material.
 
 ProBE supports general protein-function benchmarks. For the strict benchmark,
@@ -24,6 +27,21 @@ exact protein sequence, accompanied by sequence length and normalization-policy
 version. The same exact sequence may correspond to multiple aliases. A target with
 an unresolved accession may still match a historical or current record through an
 identical sequence. Exact identity and similarity are separate concepts.
+
+## Stage 2C donor eligibility — frozen EXACT contract
+
+The definitive four-case TaxID/EXACT/NONEXACT donor matrix, fragment guards,
+verified species gate, DP restrictions, and separated `strict` versus
+`same_species_exact` policy are specified in
+[`PROBE_STAGE2C_EXACT_DONOR_CONTRACT_V1.md`](PROBE_STAGE2C_EXACT_DONOR_CONTRACT_V1.md).
+
+Automatic EXACT donor admission does not require an accession/locus/lineage
+continuity test for a verified same-TaxID PRIMARY pair or verified same-species
+cross-TaxID pair under the extended policy. NONEXACT same-TaxID candidate
+admission still requires valid independent documentary support. Similarity
+must never trigger cross-TaxID DP or automatic donor eligibility.
+This Stage 2C rule does not retroactively change canonical Stage 07 outputs,
+and donor admission does not itself assert temporal GO novelty.
 
 ## Strict target eligibility and taxonomic context
 
