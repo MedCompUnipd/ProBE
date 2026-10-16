@@ -267,11 +267,13 @@ def decide(flags: int) -> tuple[str, str]:
 
 def _state_db(path: Path) -> sqlite3.Connection:
     db = sqlite3.connect(path)
+    # Build a private, disposable staging database. Durability is checked
+    # only for the finished outputs, before the atomic publication.
     db.executescript("""
-        PRAGMA journal_mode=DELETE;
-        PRAGMA synchronous=FULL;
+        PRAGMA journal_mode=MEMORY;
+        PRAGMA synchronous=OFF;
         PRAGMA temp_store=FILE;
-        PRAGMA cache_size=-32768;
+        PRAGMA cache_size=-131072;
         CREATE TABLE terms (
             target_id TEXT NOT NULL,
             aspect TEXT NOT NULL,

@@ -467,3 +467,39 @@ def test_repeated_sources_collapse_without_losing_donor_count(tmp_path):
     with sqlite3.connect(tmp_path / "full/direct_provenance.sqlite3") as conn:
         assert conn.execute("SELECT COUNT(*) FROM direct_support").fetchone()[0] == 1001
         assert conn.execute("SELECT COUNT(*) FROM term_code_support").fetchone()[0] == 3
+
+
+def test_staging_sqlite_avoids_disk_journal_and_remains_readable(tmp_path):
+    from probe.stage08_compact_interpretation import _database
+
+    db = tmp_path / "staging.sqlite3"
+    conn = _database(db)
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "memory"
+        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 0
+        assert conn.execute("PRAGMA temp_store").fetchone()[0] == 1
+        assert conn.execute("PRAGMA cache_size").fetchone()[0] == -131072
+        conn.execute(
+            "INSERT INTO direct_support VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "2023_01",
+                "T1",
+                "F",
+                "GO:0000001",
+                "POSITIVE",
+                "IDA",
+                "7",
+                "assertion",
+                1,
+                "A",
+                "enables",
+                "",
+            ),
+        )
+        conn.commit()
+        assert not (tmp_path / "staging.sqlite3-journal").exists()
+    finally:
+        conn.close()
+    with sqlite3.connect(db) as reader:
+        assert reader.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        assert reader.execute("SELECT COUNT(*) FROM direct_support").fetchone()[0] == 1

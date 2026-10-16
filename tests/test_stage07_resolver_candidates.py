@@ -321,7 +321,7 @@ def test_duplicate_audit_key_rejected(tmp_path):
 
 def test_primary_audit_overlap_rejected(tmp_path):
     audited = audit(release="2023_01", rid="100")
-    with pytest.raises(ValueError, match="PRIMARY/AUDIT overlap"):
+    with pytest.raises(ValueError, match="PRIMARY/audit overlap"):
         load(tmp_path, audit_rows=[audited])
 
 
@@ -537,3 +537,90 @@ def test_bad_composite_lineage_coverage_is_detected(tmp_path):
     candidates = load(tmp_path)
     with pytest.raises(ValueError, match="coverage mismatch"):
         join_all(tmp_path, candidates)
+
+
+def test_audit_to_primary_overlap_is_preserved_not_duplicated(tmp_path):
+    audit_row = audit(
+        release="2023_01", rid="100",
+        target_resolved_taxid="981087",
+        record_already_in_primary_union_for_target="1",
+        candidate_primary_accession="P1", raw_ox="981087",
+        anchor_resolved_taxid="989999", anchor_species_taxid="5661",
+        direct_match_type="PRIMARY", direct_match_accession="P1",
+        taxonomy_relation="SAME_SPECIES_DIFFERENT_SUBTAXON",
+    )
+    p = primary(resolved_taxid="989999")
+    rows = load(tmp_path, primary_rows=[p], audit_rows=[audit_row])
+    ref = rows[PRIMARY_KEY]
+    assert len(rows) == 1
+    assert ref.scope == "PRIMARY"
+    assert ref.audit is None
+    assert ref.overlap_audit is not None
+    assert ref.overlap_audit.alignment_allowed
+    assert ref.anchor_reference().primary_audit_overlap
+
+
+def test_audit_to_primary_overlap_identity_conflict_rejected(tmp_path):
+    audit_row = audit(
+        release="2023_01", rid="100",
+        record_already_in_primary_union_for_target="1",
+        candidate_primary_accession="BAD",
+    )
+    with pytest.raises(ValueError, match="overlap audit identity mismatch"):
+        load(tmp_path, audit_rows=[audit_row])
+
+
+def test_stage2c_full_exact_is_distinct_from_legacy_rescue(tmp_path):
+    row = primary(
+        discovery_channel="STAGE2C_FULL_EXACT",
+        go_positive_sequence_discovered="0",
+        full_v2_rescue_sequence_discovered="0",
+        lineage_discovered="0",
+        lin_distinct_lineage_key_count="",
+        lin_key_collision_present="",
+    )
+    candidate = load(tmp_path, primary_rows=[row], audit_rows=[])[PRIMARY_KEY]
+    assert candidate.scope == "PRIMARY"
+    assert candidate.discovery_channel == "STAGE2C_FULL_EXACT"
+    assert candidate.sequence_discovered
+    assert not candidate.go_positive_sequence_discovered
+    assert not candidate.full_v2_rescue_sequence_discovered
+    assert not candidate.lineage_discovered
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"discovery_channel": "SEQUENCE_ONLY"},
+        {"sequence_discovered": "0"},
+        {"go_positive_sequence_discovered": "1"},
+        {"full_v2_rescue_sequence_discovered": "1"},
+    ],
+)
+def test_stage2c_full_exact_provenance_fail_closed(tmp_path, changes):
+    row = primary(
+        discovery_channel="STAGE2C_FULL_EXACT",
+        go_positive_sequence_discovered="0",
+        full_v2_rescue_sequence_discovered="0",
+        lineage_discovered="0",
+        lin_distinct_lineage_key_count="",
+        lin_key_collision_present="",
+    )
+    row.update(changes)
+    with pytest.raises(ValueError, match="inconsistent discovery provenance"):
+        load(tmp_path, primary_rows=[row], audit_rows=[])
+
+
+def test_stage2c_go_and_full_preserves_both_sources(tmp_path):
+    row = primary(
+        discovery_channel="STAGE2C_GO_AND_FULL",
+        go_positive_sequence_discovered="1",
+        full_v2_rescue_sequence_discovered="0",
+        lineage_discovered="0",
+        lin_distinct_lineage_key_count="",
+        lin_key_collision_present="",
+    )
+    candidate = load(tmp_path, primary_rows=[row], audit_rows=[])[PRIMARY_KEY]
+    assert candidate.discovery_channel == "STAGE2C_GO_AND_FULL"
+    assert candidate.go_positive_sequence_discovered
+    assert not candidate.full_v2_rescue_sequence_discovered

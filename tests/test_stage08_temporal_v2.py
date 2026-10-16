@@ -13,6 +13,7 @@ from test_stage08_temporal_benchmark import (
     synthetic as base_synthetic_fixture,  # noqa: F401
 )
 
+from probe import stage08_temporal_v2 as temporal_v2
 from probe.stage08_temporal_v2 import (
     IKR0,
     N0N,
@@ -193,3 +194,53 @@ def test_excluded_not_without_score_is_not_eval(synthetic):
     assert not any(r["go_id"] == "GO:0000011" for r in terms)
     negatives = table(params["destination"] / "negative_terms.tsv")
     assert any(r["go_id"] == "GO:0000011" for r in negatives)
+
+
+def test_staging_sqlite_settings(tmp_path: Path) -> None:
+    path = tmp_path / "staging.sqlite3"
+    conn = temporal_v2._state_db(path)
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "memory"
+        assert conn.execute("PRAGMA synchronous").fetchone()[0] == 0
+        assert conn.execute("PRAGMA temp_store").fetchone()[0] == 1
+        assert conn.execute("PRAGMA cache_size").fetchone()[0] == -131072
+        conn.execute("INSERT INTO terms VALUES ('T1', 'F', 'GO:0000001', 1)")
+        conn.commit()
+        assert conn.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+    finally:
+        conn.close()
+
+
+def test_staging_sqlite_scientific_output_identity(
+    synthetic, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    params = v2_setup(synthetic)
+    optimized_database = temporal_v2._state_db
+
+    def historical_database(path: Path) -> sqlite3.Connection:
+        conn = sqlite3.connect(path)
+        conn.executescript("""
+            PRAGMA journal_mode=DELETE;
+            PRAGMA synchronous=FULL;
+            PRAGMA temp_store=FILE;
+            PRAGMA cache_size=-32768;
+            CREATE TABLE terms (
+                target_id TEXT NOT NULL,
+                aspect TEXT NOT NULL,
+                go_id TEXT NOT NULL,
+                flags INTEGER NOT NULL,
+                PRIMARY KEY (target_id, aspect, go_id)
+            ) WITHOUT ROWID;
+        """)
+        return conn
+
+    monkeypatch.setattr(temporal_v2, "_state_db", historical_database)
+    historical = build_temporal_benchmark_v2(**params, execute=True)
+    assert historical["output_published"] is True
+
+    params["destination"] = params["destination"].with_name("v2_optimized")
+    monkeypatch.setattr(temporal_v2, "_state_db", optimized_database)
+    optimized = build_temporal_benchmark_v2(**params, execute=True)
+    assert optimized["output_published"] is True
+    assert historical["counts"] == optimized["counts"]
+    assert historical["outputs"] == optimized["outputs"]

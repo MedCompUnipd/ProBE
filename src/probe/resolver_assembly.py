@@ -59,14 +59,14 @@ def _order(key: CandidateKey, releases: tuple[str, str]) -> tuple[int, str, int]
     return (releases.index(key[0]), key[1], int(key[2]))
 
 
-def _evidence(
+def _validate_provenance(
     facts: CandidateProvenance,
     alignment: JoinedAlignment,
-) -> ResolverEvidence:
+) -> None:
     candidate = facts.candidate
     direct = facts.direct
     lineage = facts.lineage
-    audit = candidate.audit
+    audit = candidate.audit or candidate.overlap_audit
     key = candidate.key
 
     if direct.candidate_resolved_taxid != candidate.candidate_resolved_taxid:
@@ -99,12 +99,17 @@ def _evidence(
         if lineage.collision_present != candidate.lineage_collision_present:
             raise ValueError(f"{key}: 04D2 documentary collision mismatch")
     if candidate.scope == "PRIMARY":
-        if not alignment.aligned or alignment.exact_sequence is None:
+        if not alignment.policy_skipped and (
+            not alignment.aligned or alignment.exact_sequence is None
+        ):
             raise ValueError(f"{key}: missing PRIMARY canonical alignment")
     else:
         if audit is None:
             raise ValueError(f"{key}: missing immutable audit provenance")
-        if alignment.aligned != audit.alignment_allowed:
+        if (
+            alignment.aligned != audit.alignment_allowed
+            and not alignment.policy_skipped
+        ):
             raise ValueError(f"{key}: audit alignment policy mismatch")
         if not alignment.aligned and alignment.exact_sequence is not None:
             raise ValueError(f"{key}: unexpected unaligned exactness")
@@ -113,6 +118,15 @@ def _evidence(
                 raise ValueError(f"{key}: unverified audited direct anchor")
         elif audit.reason != "CROSS_SPECIES":
             raise ValueError(f"{key}: unknown taxonomy audit reason")
+    if alignment.policy_skipped and (
+        alignment.aligned
+        or alignment.exact_sequence is not None
+        or alignment.target_global is not None
+        or alignment.candidate_global is not None
+        or alignment.exact_subsequence
+        or alignment.equal_length_variant
+    ):
+        raise ValueError(f"{key}: invalid policy-skipped alignment")
     if alignment.aligned and alignment.exact_sequence is None:
         raise ValueError(f"{key}: missing aligned literal exactness")
     if not alignment.aligned and (
@@ -120,6 +134,18 @@ def _evidence(
     ):
         raise ValueError(f"{key}: geometry on unaligned candidate")
 
+    return None
+
+
+def _evidence(
+    facts: CandidateProvenance,
+    alignment: JoinedAlignment,
+) -> ResolverEvidence:
+    _validate_provenance(facts, alignment)
+    candidate = facts.candidate
+    direct = facts.direct
+    lineage = facts.lineage
+    audit = candidate.audit if candidate.scope == "TAXONOMY_AUDIT" else None
     locus_keys = () if lineage is None else lineage.matched_locus_keys
     stable = stable_unique_locus(
         locus_keys,
@@ -132,7 +158,10 @@ def _evidence(
         audit_alignment_allowed=(None if audit is None else audit.alignment_allowed),
         direct_match_type=direct.direct_match_type,
         direct_taxonomy_pass=direct.direct_taxonomy_pass,
-        audited_direct_verified=direct.audited_direct_verified,
+        audited_direct_verified=(
+            direct.audited_direct_verified
+            and candidate.scope == "TAXONOMY_AUDIT"
+        ),
         nondirect_accession=(lineage is not None and lineage.accession_key_present),
         stable_locus=stable,
         exact_resolved_taxid=direct.exact_resolved_taxid,
@@ -161,7 +190,7 @@ class ResolvedCandidate:
         """Return exactly the proposed 19-column Stage 07 schema."""
         candidate = self.candidate
         decision = self.decision
-        audit = candidate.audit
+        audit = candidate.audit or candidate.overlap_audit
         exact = self.exact_sequence
         row = {
             "release": candidate.release,
@@ -226,6 +255,8 @@ def resolve_joined_candidates(
         if key != facts.candidate.key:
             raise ValueError(f"{key}: mismatched candidate provenance key")
         aln = alignments[key]
+        if aln.policy_skipped:
+            raise ValueError(f"{key}: skipped pair requires Stage 2C gate")
         evidence = _evidence(facts, aln)
         decision = decide(evidence, policy)
         relation = sequence_relation(
@@ -255,3 +286,12 @@ def resolve_joined_candidates(
     if set(result) != set(provenance):
         raise ValueError("Stage 07 decision coverage mismatch")
     return result
+
+
+def validate_policy_skipped_candidate(
+    facts: CandidateProvenance, alignment: JoinedAlignment
+) -> None:
+    """Validate documentary invariants without creating an alignment result."""
+    if not alignment.policy_skipped:
+        raise ValueError("Expected explicitly policy-skipped candidate")
+    _validate_provenance(facts, alignment)

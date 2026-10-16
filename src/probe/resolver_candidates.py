@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from probe.resolver_anchors import (
@@ -121,6 +121,7 @@ class CandidateRecord:
     lineage_key_count: int
     lineage_collision_present: bool
     audit: AuditDirectReference | None
+    overlap_audit: AuditDirectReference | None = None
 
     @property
     def key(self) -> CandidateKey:
@@ -135,7 +136,19 @@ class CandidateRecord:
             candidate_resolved_taxid=self.candidate_resolved_taxid,
             candidate_species_taxid=self.candidate_species_taxid,
             primary_bucket=self.primary_bucket,
-            audit=self.audit,
+            audit=(
+                self.audit or (
+                    self.overlap_audit
+                    if self.overlap_audit is not None
+                    and self.overlap_audit.alignment_allowed
+                    else None
+                )
+            ),
+            primary_audit_overlap=(
+                self.scope == "PRIMARY"
+                and self.overlap_audit is not None
+                and self.overlap_audit.alignment_allowed
+            ),
         )
 
     def lineage_reference(self) -> CandidateReference:
@@ -176,7 +189,14 @@ def _primary(
     rescue = _flag(row["full_v2_rescue_sequence_discovered"], context)
     sequence = _flag(row["sequence_discovered"], context)
     lineage = _flag(row["lineage_discovered"], context)
-    if sequence != (go or rescue) or not (sequence or lineage):
+    # Stage 2C FULL exact discovery is neither a GO-positive scanner hit
+    # nor legacy FULL_V2_RESCUE. Preserve both historical flags as false.
+    full_exact = row["discovery_channel"] == "STAGE2C_FULL_EXACT"
+    if (
+        (full_exact and (go or rescue))
+        or sequence != (go or rescue or full_exact)
+        or not (sequence or lineage)
+    ):
         raise ValueError(f"{context}: inconsistent discovery provenance")
     if not row["discovery_channel"]:
         raise ValueError(f"{context}: missing discovery channel")
@@ -229,14 +249,21 @@ def _audit(
     row: dict,
     context: str,
     target_info: tuple[str, str],
+    *,
+    allow_overlap: bool = False,
 ) -> CandidateRecord:
     raw_taxid, accession = target_info
     if row["target_raw_taxid"] != raw_taxid:
         raise ValueError(f"{context}: Stage 01/05C2 target TaxID mismatch")
     if row["target_optional_accession"] != accession:
         raise ValueError(f"{context}: Stage 01/05C2 target accession mismatch")
-    if _flag(row["record_already_in_primary_union_for_target"], context):
-        raise ValueError(f"{context}: audit row already in PRIMARY union")
+    overlap = _flag(row["record_already_in_primary_union_for_target"], context)
+    if overlap != allow_overlap:
+        if overlap:
+            raise ValueError(
+                f"{context}: marked already in PRIMARY but no PRIMARY row"
+            )
+        raise ValueError(f"{context}: inconsistent PRIMARY/audit overlap")
     key = _identity(row, context)
     if not all(
         (
@@ -320,7 +347,30 @@ def load_candidate_universe(
             if target_info is None:
                 raise ValueError(f"{context}: unknown Stage 01 target {key[1]}")
             if key in result:
-                raise ValueError(f"{context}: duplicate or PRIMARY/AUDIT overlap {key}")
+                if (
+                    scope != "TAXONOMY_AUDIT"
+                    or result[key].scope != "PRIMARY"
+                ):
+                    raise ValueError(f"{context}: duplicate candidate key {key}")
+                audit_record = _audit(
+                    row, context, target_info, allow_overlap=True
+                )
+                original = result[key]
+                if any((
+                    audit_record.candidate_accession != original.candidate_accession,
+                    audit_record.candidate_raw_ox != original.candidate_raw_ox,
+                    audit_record.candidate_resolved_taxid
+                    != original.candidate_resolved_taxid,
+                    audit_record.candidate_species_taxid
+                    != original.candidate_species_taxid,
+                    audit_record.primary_bucket != original.primary_bucket,
+                    audit_record.fragment_record != original.fragment_record,
+                )):
+                    raise ValueError(f"{context}: overlap audit identity mismatch")
+                result[key] = replace(
+                    original, overlap_audit=audit_record.audit
+                )
+                continue
             if scope == "PRIMARY":
                 record = _primary(row, context, target_info[1])
             else:

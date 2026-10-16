@@ -37,6 +37,11 @@ class StrainGateResult:
     exact_full_sequence: bool
 
 
+def unambiguous_protein(sequence: str) -> bool:
+    """True only for a nonempty protein with fully specified residues."""
+    return bool(sequence) and set(sequence).issubset(_RESIDUES)
+
+
 def _valid_taxid(value: str) -> bool:
     return bool(value) and value.isascii() and value.isdecimal() and int(value) > 0
 
@@ -78,7 +83,7 @@ def assess_strain_gate(
     if not target or not candidate or target != candidate:
         return StrainGateResult("DENIED", "NONIDENTICAL_FULL_SEQUENCE", False)
 
-    if not set(target).issubset(_RESIDUES):
+    if not unambiguous_protein(target):
         return StrainGateResult("DENIED", "AMBIGUOUS_SEQUENCE", False)
 
     if evidence.fragment_record and not evidence.verified_documentary_fragment:

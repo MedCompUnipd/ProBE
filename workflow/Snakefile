@@ -55,6 +55,24 @@ if S2C_UNION_SPEC_PATH is not None:
 else:
     S2C_UNION_PLAN = None
 
+# Stage 2C evidence chain: opt-in; disabled for scientific execution by default.
+S2C_V2_SPEC_PATH = config.pop("stage2c_variant_spec", None)
+S2C_V2_EXECUTE = str(config.pop("stage2c_execute_variant", False)).lower() in {
+    "1", "yes", "true",
+}
+if S2C_V2_SPEC_PATH is not None:
+    from probe.stage2c_workflow_plan import read_plan as read_stage2c_variant_plan
+
+    if S2C_UNION_PLAN is None:
+        raise ValueError("Stage 2C variant requires pinned shared discovery")
+    S2C_V2_PLAN = read_stage2c_variant_plan(Path(S2C_V2_SPEC_PATH))
+    if S2C_V2_PLAN["union_key"] != S2C_UNION_PLAN["key"]:
+        raise ValueError("Stage 2C variant and union plan mismatch")
+else:
+    S2C_V2_PLAN = None
+    if S2C_V2_EXECUTE:
+        raise ValueError("Stage 2C execution needs explicit variant plan")
+
 cfg = PipelineConfig.from_mapping(config)
 FINAL_STAGES = {"05A2", "05C2", "05R_POST", "06C1", "07", "08"}
 
@@ -1740,3 +1758,7 @@ if S2C_UNION_PLAN is not None:
         input:
             str(Path(S2C_UNION_PLAN["paths"]["START"]) / "manifest.json"),
             str(Path(S2C_UNION_PLAN["paths"]["END"]) / "manifest.json")
+
+# Isolated Stage 2C evidence DAG. Canonical Stage 01--08 stays unchanged.
+if S2C_V2_PLAN is not None:
+    include: "stage2c_variants.smk"

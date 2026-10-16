@@ -133,10 +133,18 @@ def _check_job(row: dict, ref: CandidateRecord, context: str) -> bool:
             raise ValueError(f"{context}: 06A sequence provenance mismatch")
         if _flag(row["lineage_discovered"], context) != ref.lineage_discovered:
             raise ValueError(f"{context}: 06A lineage provenance mismatch")
-        if row["audit_class"] not in {"", "."}:
-            raise ValueError(f"{context}: 06A unexpected audit class")
-        if row["audit_key_source_reason"] not in {"", "."}:
-            raise ValueError(f"{context}: 06A unexpected audit reason")
+        overlap = ref.overlap_audit
+        if overlap is not None and overlap.alignment_allowed:
+            if (
+                row["audit_class"] != overlap.audit_class
+                or row["audit_key_source_reason"] != overlap.reason
+            ):
+                raise ValueError(f"{context}: 06A overlap audit mismatch")
+        else:
+            if row["audit_class"] not in {"", "."}:
+                raise ValueError(f"{context}: unexpected audit class")
+            if row["audit_key_source_reason"] not in {"", "."}:
+                raise ValueError(f"{context}: unexpected audit reason")
     else:
         if ref.audit is None:
             raise ValueError(f"{context}: missing audit provenance")
@@ -256,6 +264,7 @@ class JoinedAlignment:
     equal_length_variant: bool
     target_global: AlignmentDirection | None
     candidate_global: AlignmentDirection | None
+    policy_skipped: bool = False
 
 
 def _make_alignment(
@@ -314,7 +323,7 @@ def _make_alignment(
     )
 
 
-def _not_aligned() -> JoinedAlignment:
+def _not_aligned(*, policy_skipped: bool = False) -> JoinedAlignment:
     return JoinedAlignment(
         aligned=False,
         exact_sequence=None,
@@ -324,6 +333,7 @@ def _not_aligned() -> JoinedAlignment:
         equal_length_variant=False,
         target_global=None,
         candidate_global=None,
+        policy_skipped=policy_skipped,
     )
 
 
@@ -332,6 +342,7 @@ def collect_alignments(
     candidates: Mapping[CandidateKey, CandidateRecord],
     jobs_path: Path,
     alignments_path: Path,
+    policy_skipped_keys: frozenset[CandidateKey] = frozenset(),
 ) -> dict[CandidateKey, JoinedAlignment]:
     """Require exactly the 06A/06C1 keys permitted by frozen taxonomy.
 
@@ -352,6 +363,8 @@ def collect_alignments(
         and ref.audit is not None
         and not ref.audit.alignment_allowed
     }
+    if not policy_skipped_keys.issubset(expected):
+        raise ValueError("Policy-skipped keys outside alignment jobs")
     aligned = _rows(alignments_path, _ALIGNMENT_REQUIRED)
     next_aligned = next(aligned, None)
     previous = None
@@ -364,6 +377,12 @@ def collect_alignments(
         previous = ordered
         if key not in expected:
             raise ValueError(f"{context}: unexpected 06A alignment job {key}")
+        if key in policy_skipped_keys:
+            exact = _check_job(job, candidates[key], context)
+            if exact:
+                raise ValueError(f"{context}: cannot skip an EXACT pair")
+            result[key] = _not_aligned(policy_skipped=True)
+            continue
         if next_aligned is None:
             raise ValueError(f"{context}: 06C1 missing alignment {key}")
         aln_line, row = next_aligned

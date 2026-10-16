@@ -129,12 +129,21 @@ class CandidateAnchorReference:
     candidate_species_taxid: str | None
     primary_bucket: str
     audit: AuditDirectReference | None = None
+    primary_audit_overlap: bool = False
 
     def __post_init__(self) -> None:
         if self.scope not in {"PRIMARY", "TAXONOMY_AUDIT"}:
             raise ValueError("Unknown 05A2/05C2 source scope")
-        if (self.audit is None) != (self.scope == "PRIMARY"):
-            raise ValueError("Audit facts must match original source scope")
+        if self.scope == "TAXONOMY_AUDIT" and self.audit is None:
+            raise ValueError("Audited source must retain its 05C2 facts")
+        if self.scope == "PRIMARY":
+            if self.primary_audit_overlap:
+                if self.audit is None or not self.audit.alignment_allowed:
+                    raise ValueError("Unverified PRIMARY/audit overlap")
+            elif self.audit is not None:
+                raise ValueError("PRIMARY cannot invent audit provenance")
+        elif self.primary_audit_overlap:
+            raise ValueError("PRIMARY/audit overlap on wrong source scope")
         if (
             not self.candidate_accession
             or not self.candidate_raw_ox

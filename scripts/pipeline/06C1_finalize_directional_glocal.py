@@ -31,6 +31,7 @@ import argparse
 import csv
 import json
 from collections import Counter
+from contextlib import nullcontext
 from pathlib import Path
 
 KEY = ("release", "target_id", "rid")
@@ -178,6 +179,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--alignment-jobs", type=Path, required=True)
     ap.add_argument("--nonexact-alignments", type=Path, required=True)
+    ap.add_argument("--policy-skipped", type=Path)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--summary", type=Path, required=True)
     ap.add_argument("--start-release-id", required=True)
@@ -192,7 +194,10 @@ def main() -> int:
         args.end_release_id,
     }
 
-    for p in (args.alignment_jobs, args.nonexact_alignments):
+    inputs = (args.alignment_jobs, args.nonexact_alignments)
+    if args.policy_skipped is not None:
+        inputs += (args.policy_skipped,)
+    for p in inputs:
         if not p.is_file():
             raise FileNotFoundError(p)
 
@@ -204,6 +209,7 @@ def main() -> int:
     total = 0
     exact_count = 0
     nonexact_count = 0
+    skipped_count = 0
     total_dp_cells = 0
 
     release_counts = Counter()
@@ -227,6 +233,11 @@ def main() -> int:
             args.alignment_jobs.open("r", encoding="utf-8", newline="") as jh,
             args.nonexact_alignments.open("r", encoding="utf-8", newline="") as nh,
             out_tmp.open("w", encoding="utf-8", newline="") as oh,
+            (
+                args.policy_skipped.open("r", encoding="utf-8", newline="")
+                if args.policy_skipped is not None
+                else nullcontext(None)
+            ) as sh,
         ):
             jr = csv.DictReader(jh, delimiter="\t")
             nr = csv.DictReader(nh, delimiter="\t")
@@ -255,6 +266,32 @@ def main() -> int:
             )
             writer.writeheader()
 
+            skip_reader = None
+            if sh is not None:
+                skip_reader = csv.DictReader(sh, delimiter="\t")
+                if skip_reader.fieldnames != [
+                    "release", "target_id", "rid", "reason"
+                ]:
+                    raise ValueError("Invalid policy skip sidecar header")
+            skip_it = iter(()) if skip_reader is None else iter(skip_reader)
+            def read_skip():
+                record = next(skip_it, None)
+                if record is not None and (
+                    None in record
+                    or any(value is None for value in record.values())
+                    or record["reason"] != "CROSS_TAXID_NONEXACT"
+                    or not record["release"]
+                    or not record["target_id"]
+                    or not record["rid"].isascii()
+                    or not record["rid"].isdecimal()
+                    or int(record["rid"]) < 1
+                    or str(int(record["rid"])) != record["rid"]
+                ):
+                    raise ValueError("Invalid policy skip sidecar row")
+                return record
+
+            next_skip = read_skip()
+            previous_skip = None
             next_nonexact = next(nr, None)
 
             for job in jr:
@@ -315,6 +352,21 @@ def main() -> int:
                     nonexact_count += 1
                     nonexact_by_release[job["release"]] += 1
 
+                    if next_skip is not None and row_key(next_skip) == key:
+                        skipped_key = row_key(next_skip)
+                        ordered_skip = (
+                            skipped_key[0], skipped_key[1], int(skipped_key[2])
+                        )
+                        if (
+                            next_skip["reason"] != "CROSS_TAXID_NONEXACT"
+                            or previous_skip is not None
+                            and ordered_skip <= previous_skip
+                        ):
+                            raise ValueError("Invalid policy skip sidecar row")
+                        previous_skip = ordered_skip
+                        skipped_count += 1
+                        next_skip = read_skip()
+                        continue
                     if next_nonexact is None:
                         raise ValueError(f"NONEXACT table ended before job {key}")
 
@@ -352,6 +404,8 @@ def main() -> int:
 
                 writer.writerow(row)
 
+            if next_skip is not None:
+                raise ValueError("Policy skip contains extra/unmatched key")
             if next_nonexact is not None:
                 raise ValueError(
                     f"NONEXACT table contains extra row {row_key(next_nonexact)}"
@@ -366,7 +420,9 @@ def main() -> int:
             "canonical_pair_count": total,
             "exact_pair_count": exact_count,
             "nonexact_pair_count": nonexact_count,
-            "directional_alignment_count": total * 2,
+            "directional_alignment_count": (total - skipped_count) * 2,
+            "aligned_nonexact_pair_count": nonexact_count - skipped_count,
+            "policy_skipped_nonexact_count": skipped_count,
             "nonexact_directional_full_dp_cell_count": total_dp_cells,
             "release_counts": dict(sorted(release_counts.items())),
             "scope_counts": dict(sorted(scope_counts.items())),

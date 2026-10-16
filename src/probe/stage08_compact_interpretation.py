@@ -66,10 +66,17 @@ class RoleTables:
 
 def _database(db_file: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_file)
-    conn.execute("PRAGMA journal_mode=DELETE")
-    conn.execute("PRAGMA synchronous=FULL")
+    # This database is built in a private, unpublished staging directory.
+    # An interrupted build is discarded; no published database is modified.
+    # Keep rollback journals in RAM and avoid per-commit filesystem syncs.
+    # Final integrity checks, file fsyncs, and atomic rename are retained.
+    mode = conn.execute("PRAGMA journal_mode=MEMORY").fetchone()[0]
+    if mode != "memory":
+        conn.close()
+        raise RuntimeError("M10c staging requires an in-memory SQLite journal")
+    conn.execute("PRAGMA synchronous=OFF")
     conn.execute("PRAGMA temp_store=FILE")
-    conn.execute("PRAGMA cache_size=-32768")
+    conn.execute("PRAGMA cache_size=-131072")
     conn.executescript("""
         CREATE TABLE direct_support (
             release TEXT NOT NULL,
