@@ -1,6 +1,7 @@
-"""Pinned discovery plan for the independent FULL UniProt cross-strain scan.
+"""Pinned discovery plan for independent FULL UniProt same-species identity.
 
 No GO-donor policy belongs in this plan. All outputs are immutable.
+Historical cross-strain output names include same-TaxID literal matches.
 """
 
 from __future__ import annotations
@@ -15,8 +16,9 @@ from pathlib import Path
 from probe.workflow.artifacts import StageManifest, validate_bundle
 
 ROLES = ("START", "END")
-SCHEMA = "probe-stage2c-full-exact-plan-v1"
-SCIENCE = "same-species-distinct-taxid-complete-sequence-exact-v1"
+SCHEMA = "probe-stage2c-full-exact-plan-v3"
+SCIENCE = "same-species-all-taxids-literal-iupac26-exact-v3"
+FULL_EXACT_SCOPE = "same_species_same_or_distinct_resolved_taxid"
 CODE_FILES = (
     "cpp/src/probe_full_exact_cross_strain_v1.cpp",
     "src/probe/stage2c_full_exact.py",
@@ -30,6 +32,42 @@ INPUT_STAGES = {
     "ox": "04D0b",
 }
 OUTPUT_BASENAME = "03_full_exact_cross_strain"
+
+
+def validate_scanner_summary(metrics: dict[str, str], *, release: str) -> None:
+    """Refuse a historical scanner or inconsistent pair accounting."""
+    expected = {
+        "release": release,
+        "taxonomic_scope": FULL_EXACT_SCOPE,
+        "sequence_identity_policy": "literal-iupac26-v1",
+        "ambiguous_symbols_are_wildcards": "0",
+    }
+    for name, value in expected.items():
+        if metrics.get(name) != value:
+            raise ValueError(f"FULL exact scanner contract mismatch: {name}")
+    counts = {}
+    for name in (
+        "full_literal_exact_pairs",
+        "same_taxid_exact_pairs",
+        "cross_strain_exact_pairs",
+        "full_fasta_records",
+        "matched_full_records",
+    ):
+        value = metrics.get(name, "")
+        if not value.isascii() or not value.isdecimal():
+            raise ValueError(f"Invalid FULL exact scanner count: {name}")
+        counts[name] = int(value)
+    total = counts["full_literal_exact_pairs"]
+    same = counts["same_taxid_exact_pairs"]
+    cross = counts["cross_strain_exact_pairs"]
+    matched = counts["matched_full_records"]
+    if (
+        same + cross != total
+        or matched > total
+        or matched > counts["full_fasta_records"]
+        or bool(matched) != bool(total)
+    ):
+        raise ValueError("Inconsistent FULL exact scanner pair counts")
 
 
 def sha256(path: Path) -> str:
@@ -123,10 +161,12 @@ def build_plan(repo: Path, run: Path) -> dict:
         "code": code,
         "binary_sha256": sha256(binary_path),
         "parameters": {
-            "scope": "same_species_distinct_resolved_taxid",
+            "scope": FULL_EXACT_SCOPE,
             "identity": "full_sequence_literal_exact",
+            "independent_of_go_positive": True,
             "fragment": "exclude",
-            "residue_policy": "unambiguous_only",
+            "residue_policy": "literal_iupac26",
+            "ambiguous_symbols_are_wildcards": False,
         },
     }
     key = _key(inputs)

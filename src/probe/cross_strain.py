@@ -16,6 +16,8 @@ GateStatus = Literal["DENIED", "ELIGIBLE", "DEFER_TO_DOCUMENTARY"]
 # X, B, Z and J are ambiguous; '*' indicates termination, not a residue.
 # U (selenocysteine) and O (pyrrolysine) are explicit residues.
 _RESIDUES = frozenset("ACDEFGHIKLMNPQRSTVWYOU")
+_LITERAL_RESIDUES = _RESIDUES | frozenset("BJXZ")
+LITERAL_EXACT_POLICY = "literal-iupac26-v1"
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,11 @@ class StrainGateResult:
 def unambiguous_protein(sequence: str) -> bool:
     """True only for a nonempty protein with fully specified residues."""
     return bool(sequence) and set(sequence).issubset(_RESIDUES)
+
+
+def literal_protein(sequence: str) -> bool:
+    """Accept literal IUPAC protein symbols, never ambiguity expansion."""
+    return bool(sequence) and set(sequence).issubset(_LITERAL_RESIDUES)
 
 
 def _valid_taxid(value: str) -> bool:
@@ -83,8 +90,8 @@ def assess_strain_gate(
     if not target or not candidate or target != candidate:
         return StrainGateResult("DENIED", "NONIDENTICAL_FULL_SEQUENCE", False)
 
-    if not unambiguous_protein(target):
-        return StrainGateResult("DENIED", "AMBIGUOUS_SEQUENCE", False)
+    if not literal_protein(target):
+        return StrainGateResult("DENIED", "INVALID_PROTEIN_ALPHABET", False)
 
     if evidence.fragment_record and not evidence.verified_documentary_fragment:
         return StrainGateResult("DENIED", "FRAGMENT_NEEDS_DOCUMENTARY", True)

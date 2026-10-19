@@ -104,6 +104,17 @@ def run_scan(
     return pairs, summary
 
 
+def test_same_taxid_literal_exact(scanner: Path, tmp_path: Path) -> None:
+    pairs, summary = run_scan(scanner, tmp_path, [("111", "0", SEQ)])
+    assert [row["rid"] for row in pairs] == ["1"]
+    assert pairs[0]["candidate_resolved_taxid"] == "111"
+    assert pairs[0]["target_resolved_taxid"] == "111"
+    assert pairs[0]["exact_full_sequence"] == "1"
+    assert summary["same_taxid_exact_pairs"] == "1"
+    assert summary["cross_strain_exact_pairs"] == "0"
+    assert summary["full_literal_exact_pairs"] == "1"
+
+
 def test_other_strain_exact_match(scanner: Path, tmp_path: Path) -> None:
     pairs, summary = run_scan(scanner, tmp_path, [("112", "0", SEQ)])
     assert len(pairs) == 1
@@ -118,7 +129,6 @@ def test_other_strain_exact_match(scanner: Path, tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("ox", "fragment", "seq"),
     [
-        ("111", "0", SEQ),
         ("9606", "0", SEQ),
         ("112", "0", SEQ[:-1] + "A"),
         ("112", "0", SEQ[:-1]),
@@ -160,7 +170,12 @@ def test_multiple_records_preserve_full_ordinal(scanner: Path, tmp_path: Path) -
         tmp_path,
         [("111", "0", SEQ), ("112", "0", SEQ), ("999", "0", SEQ)],
     )
-    assert [row["rid"] for row in pairs] == ["2", "3"]
+    assert [row["rid"] for row in pairs] == ["1", "2", "3"]
+    assert [row["candidate_resolved_taxid"] for row in pairs] == [
+        "111", "112", "112"
+    ]
+    assert summary["same_taxid_exact_pairs"] == "1"
+    assert summary["cross_strain_exact_pairs"] == "2"
     assert summary["full_fasta_records"] == "3"
 
 

@@ -1,0 +1,71 @@
+{
+  "inputs": {
+    "evidence_registry": "/REPLACE_WITH_PINNED_EVIDENCE_REGISTRY",
+    "go_policy_bundle": "/REPLACE_WITH_PINNED_01B0_POLICY_BUNDLE",
+    "lineage_index": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/common/04D1/04D1_lineage_scan_index.tsv",
+    "ontology": "/REPLACE_WITH_PINNED_GO_OWL",
+    "targets": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/common/01/01_targets.tsv",
+    "targets_input": "/REPLACE_WITH_PINNED_ORIGINAL_TARGET_FASTA",
+    "temporal_policy": "/REPLACE_WITH_PINNED_TEMPORAL_POLICY"
+  },
+  "limits": {
+    "documentary_fragment": "allow",
+    "max_chunk_cells": 50000000,
+    "max_pair_cells": 50000000,
+    "max_total_cells": 500000000,
+    "partial_sequence": "allow",
+    "threads": 8
+  },
+  "mode": "prepare",
+  "output_root": "/data/PROGENY/ProBE-runs/canonical-v2-new",
+  "per_release": {
+    "END": {
+      "anchors": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04B/04B_classified_direct_anchors.tsv",
+      "full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_END_FULL_EXACT_PAIRS",
+      "full_manifest": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/01A_FULL/manifest.json",
+      "go_positive_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/03_species_wide_variants/56061434047dab79a2d7ba4f1896f93186b16c86237738ac55f4dcd4ee7a17f0/03_primary_candidates.pairs.tsv",
+      "goa_bundle": "/REPLACE_WITH_PINNED_END_01B1_GO_BUNDLE",
+      "lineage": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04D2/04D2_lineage_evidence.tsv",
+      "lineage_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04E/04E_lineage_candidates.tsv",
+      "ox_taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/02B/02B_ox_taxonomy.tsv",
+      "rescue_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/05R1/05R1_full_sequence_rescue.pairs.tsv",
+      "taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/02B/02B_target_taxonomy.tsv",
+      "unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_END_DISCOVERY"
+    },
+    "START": {
+      "anchors": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04B/04B_classified_direct_anchors.tsv",
+      "full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_START_FULL_EXACT_PAIRS",
+      "full_manifest": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/01A_FULL/manifest.json",
+      "go_positive_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/03_species_wide_variants/56061434047dab79a2d7ba4f1896f93186b16c86237738ac55f4dcd4ee7a17f0/03_primary_candidates.pairs.tsv",
+      "goa_bundle": "/REPLACE_WITH_PINNED_START_01B1_GO_BUNDLE",
+      "lineage": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04D2/04D2_lineage_evidence.tsv",
+      "lineage_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04E/04E_lineage_candidates.tsv",
+      "ox_taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/02B/02B_ox_taxonomy.tsv",
+      "rescue_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/05R1/05R1_full_sequence_rescue.pairs.tsv",
+      "taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/02B/02B_target_taxonomy.tsv",
+      "unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_START_DISCOVERY"
+    }
+  },
+  "policy": "same_species_exact",
+  "releases": {
+    "END": "2026_03",
+    "START": "2023_01"
+  },
+  "schema": "probe-canonical-v2-dag-input-v2",
+  "scientific_contracts": {
+    "dp_backend": "certified-geometric-bounds-v2",
+    "dp_scoring": "literal-match2-mismatch-1-affine-open-3-extend-1-v1",
+    "exact_identity": "literal-iupac26-v1",
+    "nonexact_admission": "same-resolved-taxid-documentary-literal-v1"
+  },
+  "tools": {
+    "collection_cli": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/08_collect_annotations.py",
+    "finalize_script": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/06C1_finalize_directional_glocal.py",
+    "full_dp_binary": "/REPLACE_WITH_PINNED_CERTIFIED_BOUNDED_DP_V2_BINARY",
+    "m10c_cli": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/08_interpret_compact.py",
+    "nonexact_script": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/NONEXACT_select_alignment_jobs.py",
+    "stage05c2_cli": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/05C2_freeze_taxonomy_audit_channel.py",
+    "stage06a_cli": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/06A_prepare_alignment_jobs.py",
+    "temporal_cli": "/data/PROGENY/ProBE-chatgpt/scripts/pipeline/08_build_benchmark_v2.py"
+  }
+}

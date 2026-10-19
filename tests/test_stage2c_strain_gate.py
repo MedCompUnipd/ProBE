@@ -70,15 +70,43 @@ def test_fragment_requires_independent_documentary_support() -> None:
     )
 
 
-@pytest.mark.parametrize("ambiguous", ["X", "B", "Z", "J", "*", "?"])
-def test_ambiguous_exact_sequences_are_denied(ambiguous: str) -> None:
+@pytest.mark.parametrize("residue", ["B", "J", "X", "Z"])
+def test_iupac26_literal_ambiguous_sequences_are_exact(residue: str) -> None:
     row = replace(
         BASE,
-        target_sequence=SEQ + ambiguous,
-        candidate_sequence=SEQ + ambiguous,
+        target_sequence=SEQ + residue,
+        candidate_sequence=SEQ + residue,
     )
     result = assess_strain_gate(row, policy="same_species_exact")
-    assert result.reason == "AMBIGUOUS_SEQUENCE"
+    assert result.status == "ELIGIBLE"
+    assert result.reason == "EXACT_SAME_SPECIES"
+    assert result.exact_full_sequence
+
+
+@pytest.mark.parametrize("residue", ["B", "J", "X", "Z"])
+def test_iupac26_ambiguities_are_not_wildcards(residue: str) -> None:
+    row = replace(
+        BASE,
+        target_sequence=SEQ + residue,
+        candidate_sequence=SEQ + "A",
+    )
+    result = assess_strain_gate(row, policy="same_species_exact")
+    assert result.status == "DENIED"
+    assert result.reason == "NONIDENTICAL_FULL_SEQUENCE"
+    assert not result.exact_full_sequence
+
+
+@pytest.mark.parametrize("invalid", ["*", "?", "-", "a"])
+def test_invalid_alphabet_exact_sequences_are_denied(invalid: str) -> None:
+    row = replace(
+        BASE,
+        target_sequence=SEQ + invalid,
+        candidate_sequence=SEQ + invalid,
+    )
+    result = assess_strain_gate(row, policy="same_species_exact")
+    assert result.status == "DENIED"
+    assert result.reason == "INVALID_PROTEIN_ALPHABET"
+    assert not result.exact_full_sequence
 
 
 def test_biologically_explicit_special_residues_are_allowed() -> None:

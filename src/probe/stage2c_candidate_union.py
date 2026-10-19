@@ -3,6 +3,8 @@
 Input paths are independent, pinned Stage 03 products. The union is
 species-agnostic: the resolved *species* TaxID is the only taxonomic scope.
 UniProt RID is release-scoped; GO-positive and FULL record numbers are NOT.
+FULL exact discovery includes both identical and distinct resolved TaxIDs;
+its evidence does not require that the record be present in GO-positive.
 """
 
 from __future__ import annotations
@@ -62,7 +64,7 @@ OUTPUT_COLUMNS = (
     "strict_gate",
     "same_species_exact_gate",
 )
-SCHEMA = "stage2c-unified-discovery-v1"
+SCHEMA = "stage2c-unified-discovery-v2"
 
 
 def _rows(path: Path, required: frozenset[str]):
@@ -106,15 +108,21 @@ def _taxonomy(path: Path) -> dict[str, tuple[str, str]]:
 
 
 def _check_candidate(
-    row: dict, target: tuple[str, str], *, full: bool
+    row: dict,
+    target: tuple[str, str],
+    *,
+    full: bool,
+    allow_literal_fragments: bool = False,
 ) -> tuple[str, str, str, str, str, str]:
     tax = row["candidate_resolved_taxid"] if full else row["resolved_taxid"]
     tax = _positive(tax, "candidate TaxID")
     species = _positive(row["species_taxid"], "candidate species TaxID")
     if species != target[1]:
         raise ValueError("Cross-species record in species-wide discovery")
-    if row["frag"] != "0":
-        raise ValueError("FRAG=1 is forbidden in sequence-only discovery")
+    if row["frag"] not in {"0", "1"}:
+        raise ValueError("Invalid fragment flag")
+    if row["frag"] == "1" and not (full and allow_literal_fragments):
+        raise ValueError("FRAG=1 needs verified FULL literal EXACT")
     if not row["accession"] or not row["raw_ox"]:
         raise ValueError("Missing candidate accession or OX")
     rid = _positive(row["rid"], "UniProt RID")
@@ -139,6 +147,7 @@ def merge_discovery(
     full_exact_pairs: Path,
     output: Path,
     summary: Path,
+    allow_literal_fragments: bool = False,
 ) -> dict:
     """Merge by (target, RID) using disk-backed SQLite, never GO donor YES.
 
@@ -209,13 +218,17 @@ def merge_discovery(
                 target_id = row["target_id"]
                 if target_id not in targets:
                     raise ValueError("FULL exact pair has unknown target")
-                parts = _check_candidate(row, targets[target_id], full=True)
+                parts = _check_candidate(
+                    row,
+                    targets[target_id],
+                    full=True,
+                    allow_literal_fragments=allow_literal_fragments,
+                )
                 if (
                     row["exact_full_sequence"] != "1"
                     or row["discovery_channel"] != "FULL_V2_EXACT"
-                    or parts[3] == targets[target_id][0]
                 ):
-                    raise ValueError("Invalid cross-strain FULL exact evidence")
+                    raise ValueError("Invalid FULL exact evidence")
                 old = db.execute(
                     "SELECT accession, raw_ox, target_tax, candidate_tax, "
                     "species, go_exact, full_exact FROM candidate "
@@ -258,6 +271,8 @@ def merge_discovery(
                     )
                     counters["both_channels"] += 1
                 counters["full_exact_pairs"] += 1
+                if parts[3] == targets[target_id][0]:
+                    counters["same_taxid_full_exact_pairs"] += 1
 
             with output.open("x", encoding="utf-8", newline="") as stream:
                 writer = csv.writer(stream, delimiter="\t", lineterminator="\n")

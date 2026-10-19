@@ -172,11 +172,25 @@ def test_same_taxid_exact_preserves_direct_documentary_decision():
     assert row.decision_basis == "DIRECT_PRIMARY_ACCESSION"
 
 
-@pytest.mark.parametrize("residue", ("B", "Z", "J", "X", "*"))
-def test_same_taxid_ambiguous_exact_not_automatically_donor(residue):
+@pytest.mark.parametrize("residue", ("B", "Z", "J", "X"))
+@pytest.mark.parametrize("strain_policy", ("strict", "same_species_exact"))
+def test_same_taxid_iupac26_literal_exact_is_donor(residue, strain_policy):
     case = fixture(candidate_taxid="100", documentary=False)
     key = next(iter(case[3]))
     sequence = SEQ[:4] + residue + SEQ[5:]
+    case[3][key] = (sequence, sequence)
+    row = decision(case, policy=strain_policy)
+    assert row.decision == "ACCEPTED"
+    assert row.annotation_donor
+    assert row.decision_basis == "SAME_TAXID_LITERAL_EXACT_SEQUENCE"
+    assert "SAME_TAXID_LITERAL_EXACT_PROOF" in row.warnings
+
+
+@pytest.mark.parametrize("invalid", ("*", "?", "-", "a"))
+def test_same_taxid_invalid_alphabet_exact_is_not_donor(invalid):
+    case = fixture(candidate_taxid="100", documentary=False)
+    key = next(iter(case[3]))
+    sequence = SEQ[:4] + invalid + SEQ[5:]
     case[3][key] = (sequence, sequence)
     row = decision(case, policy="strict")
     assert row.decision == "UNRESOLVED"
@@ -217,12 +231,18 @@ def test_cross_species_never_donates():
     assert result.annotation_donor is False
 
 
-def test_ambiguous_exact_protein_is_denied():
-    case = fixture()
-    case[3][next(iter(case[3]))] = ("ACDEXGHIKLMN", "ACDEXGHIKLMN")
-    result = decision(case)
-    assert result.annotation_donor is False
-    assert "AMBIGUOUS_SEQUENCE" in result.warnings
+@pytest.mark.parametrize("residue", ("B", "Z", "J", "X"))
+@pytest.mark.parametrize("documentary", (False, True))
+def test_literal_iupac26_cross_strain_exact_is_donor(residue, documentary):
+    case = fixture(documentary=documentary)
+    key = next(iter(case[3]))
+    sequence = SEQ[:4] + residue + SEQ[5:]
+    case[3][key] = (sequence, sequence)
+    row = decision(case)
+    assert row.decision == "ACCEPTED"
+    assert row.annotation_donor
+    assert row.decision_basis == "SAME_SPECIES_LITERAL_EXACT_SEQUENCE"
+    assert "CROSS_STRAIN_LITERAL_EXACT_PROOF" in row.warnings
 
 
 def test_fragment_without_independent_document_never_donates():
@@ -308,14 +328,17 @@ def test_exact_cross_strain_is_policy_specific_not_documentary():
     assert decision(fixture(), policy="same_species_exact").annotation_donor
 
 
-def test_ambiguous_exact_with_documentary_anchor_remains_denied():
-    case = fixture(documentary=True)
+@pytest.mark.parametrize("invalid", ("*", "?", "-", "a"))
+@pytest.mark.parametrize("documentary", (False, True))
+def test_invalid_alphabet_cross_strain_exact_is_denied(invalid, documentary):
+    case = fixture(documentary=documentary)
     key = next(iter(case[3]))
-    case[3][key] = ("ACDEXGHIKLMN", "ACDEXGHIKLMN")
-    result = decision(case)
-    assert result.annotation_donor is False
-    assert result.decision == "UNRESOLVED"
-    assert "AMBIGUOUS_SEQUENCE" in result.warnings
+    sequence = SEQ[:4] + invalid + SEQ[5:]
+    case[3][key] = (sequence, sequence)
+    row = decision(case)
+    assert row.decision == "UNRESOLVED"
+    assert not row.annotation_donor
+    assert "INVALID_PROTEIN_ALPHABET" in row.warnings
 
 
 def test_unresolved_taxonomy_cannot_keep_canonical_donor():

@@ -115,7 +115,11 @@ def exact_direction(prefix: str, n: int) -> dict[str, str]:
     }
 
 
-def validate_directional_nonexact(row: dict[str, str], key) -> int:
+def validate_directional_nonexact(
+    row: dict[str, str],
+    key,
+    expected_cells: tuple[int, int] | None = None,
+) -> int:
     n = int(row["target_length"])
     m = int(row["candidate_length"])
 
@@ -144,10 +148,17 @@ def validate_directional_nonexact(row: dict[str, str], key) -> int:
     if row["candidate_global_candidate_coverage"] != "1.0000000000":
         raise ValueError(f"{key}: CANDIDATE_GLOBAL candidate coverage != 1")
 
-    expected_cells = (n + 1) * (m + 1)
+    full_cells = (n + 1) * (m + 1)
+    if expected_cells is None:
+        expected_cells = full_cells, full_cells
+    if any(
+        type(value) is not int or not 0 < value <= full_cells
+        for value in expected_cells
+    ):
+        raise ValueError(f"{key}: invalid certified DP cell counts")
     tg_cells = int(row["target_global_cells_evaluated"])
     cg_cells = int(row["candidate_global_cells_evaluated"])
-    if tg_cells != expected_cells or cg_cells != expected_cells:
+    if (tg_cells, cg_cells) != expected_cells:
         raise ValueError(
             f"{key}: DP cell mismatch expected={expected_cells} "
             f"target_global={tg_cells} candidate_global={cg_cells}"
@@ -180,6 +191,7 @@ def main() -> int:
     ap.add_argument("--alignment-jobs", type=Path, required=True)
     ap.add_argument("--nonexact-alignments", type=Path, required=True)
     ap.add_argument("--policy-skipped", type=Path)
+    ap.add_argument("--dp-cell-plan", type=Path)
     ap.add_argument("--output", type=Path, required=True)
     ap.add_argument("--summary", type=Path, required=True)
     ap.add_argument("--start-release-id", required=True)
@@ -197,6 +209,8 @@ def main() -> int:
     inputs = (args.alignment_jobs, args.nonexact_alignments)
     if args.policy_skipped is not None:
         inputs += (args.policy_skipped,)
+    if args.dp_cell_plan is not None:
+        inputs += (args.dp_cell_plan,)
     for p in inputs:
         if not p.is_file():
             raise FileNotFoundError(p)
@@ -205,6 +219,19 @@ def main() -> int:
         if p.exists():
             raise FileExistsError(f"refusing to overwrite: {p}")
         p.parent.mkdir(parents=True, exist_ok=True)
+
+    cell_plan = None
+    planned_lengths = {}
+    if args.dp_cell_plan is not None:
+        from probe.canonical_v2.bounded_dp import read_plan
+
+        cell_plan = read_plan(args.dp_cell_plan)
+        with args.dp_cell_plan.open(encoding="utf-8", newline="") as stream:
+            for record in csv.DictReader(stream, delimiter="\t"):
+                planned_lengths[row_key(record)] = (
+                    record["target_length"],
+                    record["candidate_length"],
+                )
 
     total = 0
     exact_count = 0
@@ -269,17 +296,20 @@ def main() -> int:
             skip_reader = None
             if sh is not None:
                 skip_reader = csv.DictReader(sh, delimiter="\t")
-                if skip_reader.fieldnames != [
-                    "release", "target_id", "rid", "reason"
-                ]:
+                if skip_reader.fieldnames != ["release", "target_id", "rid", "reason"]:
                     raise ValueError("Invalid policy skip sidecar header")
             skip_it = iter(()) if skip_reader is None else iter(skip_reader)
+
             def read_skip():
                 record = next(skip_it, None)
                 if record is not None and (
                     None in record
                     or any(value is None for value in record.values())
-                    or record["reason"] != "CROSS_TAXID_NONEXACT"
+                    or record["reason"]
+                    not in {
+                        "CROSS_TAXID_NONEXACT",
+                        "NO_DOCUMENTARY_WITNESS",
+                    }
                     or not record["release"]
                     or not record["target_id"]
                     or not record["rid"].isascii()
@@ -355,10 +385,16 @@ def main() -> int:
                     if next_skip is not None and row_key(next_skip) == key:
                         skipped_key = row_key(next_skip)
                         ordered_skip = (
-                            skipped_key[0], skipped_key[1], int(skipped_key[2])
+                            skipped_key[0],
+                            skipped_key[1],
+                            int(skipped_key[2]),
                         )
                         if (
-                            next_skip["reason"] != "CROSS_TAXID_NONEXACT"
+                            next_skip["reason"]
+                            not in {
+                                "CROSS_TAXID_NONEXACT",
+                                "NO_DOCUMENTARY_WITNESS",
+                            }
                             or previous_skip is not None
                             and ordered_skip <= previous_skip
                         ):
@@ -378,7 +414,19 @@ def main() -> int:
 
                     row = next_nonexact
                     validate_base_against_job(row, job, key)
-                    total_dp_cells += validate_directional_nonexact(row, key)
+                    expected_cells = None
+                    if cell_plan is not None:
+                        if key not in cell_plan or planned_lengths[key] != (
+                            job["target_length"],
+                            job["candidate_length"],
+                        ):
+                            raise ValueError("Certified plan/06A job mismatch")
+                        expected_cells = cell_plan.pop(key)
+                    total_dp_cells += validate_directional_nonexact(
+                        row,
+                        key,
+                        expected_cells,
+                    )
                     next_nonexact = next(nr, None)
 
                 target_status_counts[row["target_global_status"]] += 1
@@ -410,6 +458,8 @@ def main() -> int:
                 raise ValueError(
                     f"NONEXACT table contains extra row {row_key(next_nonexact)}"
                 )
+            if cell_plan:
+                raise ValueError("Certified plan contains extra/unmatched pairs")
 
         summary = {
             "stage": "06C1",
@@ -455,6 +505,18 @@ def main() -> int:
                 "overlap_06B_is_not_canonical_alignment": True,
             },
         }
+        if args.dp_cell_plan is not None:
+            summary["policy"].update(
+                {
+                    "alignment_model": "directional glocal affine certified-region DP",
+                    "nonexact_alignment_is_exact_full_dp": False,
+                    "nonexact_alignment_has_full_dp_optimum": True,
+                    "banding_used": True,
+                    "banding_is_certified": True,
+                    "heuristic_banding_used": False,
+                    "cell_accounting": "certified-region visited cells",
+                }
+            )
 
         with sum_tmp.open("w", encoding="utf-8") as sh:
             json.dump(summary, sh, indent=2, sort_keys=True)

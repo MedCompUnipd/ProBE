@@ -168,7 +168,7 @@ def test_full_nonexact_refused(tmp_path: Path) -> None:
     full = paths[2]
     data = full.read_text().replace("\t1\tFULL_V2_EXACT", "\t0\tFULL_V2_EXACT", 1)
     full.write_text(data)
-    with pytest.raises(ValueError, match="Invalid cross-strain"):
+    with pytest.raises(ValueError, match="Invalid FULL exact evidence"):
         _merge(tmp_path, paths)
 
 

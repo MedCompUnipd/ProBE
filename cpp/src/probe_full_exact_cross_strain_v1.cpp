@@ -1,7 +1,10 @@
-// ProBE 2C3A: read-only FULL-V2 cross-strain exact-match discovery.
+// ProBE 2C3A: read-only FULL-V2 same-species literal exact discovery.
+// The historical cross-strain filename also covers identical resolved TaxIDs.
 // A discovered exact match is NOT by itself an annotation donor.
 // Data source: pinned 01A_FULL FASTA, 02B targets, 04D0b FULL-OX taxonomy.
-// FRAG=1 and ambiguous sequences cannot enter this discovery channel.
+// Literal IUPAC identity includes B/J/X/Z; those symbols are not wildcards.
+// FRAG=1 is eligible only after full observed literal identity.
+// The --fragment-policy switch controls explicit user exclusion.
 
 #include <cstdint>
 #include <filesystem>
@@ -77,7 +80,7 @@ bool valid_sequence(const std::string& sequence) {
         case 'G': case 'H': case 'I': case 'K': case 'L':
         case 'M': case 'N': case 'P': case 'Q': case 'R':
         case 'S': case 'T': case 'V': case 'W': case 'Y':
-        case 'U': case 'O':
+        case 'U': case 'O': case 'B': case 'J': case 'X': case 'Z':
             break;
         default:
             return false;
@@ -201,8 +204,11 @@ struct Counts {
     std::uint64_t unknown_ox = 0;
     std::uint64_t unresolved_taxonomy = 0;
     std::uint64_t fragments = 0;
-    std::uint64_t ambiguous = 0;
+    std::uint64_t invalid_alphabet = 0;
+    std::uint64_t ambiguous_observed = 0;
     std::uint64_t matches = 0;
+    std::uint64_t same_taxid_matches = 0;
+    std::uint64_t cross_strain_matches = 0;
     std::uint64_t matching_records = 0;
 };
 
@@ -224,15 +230,23 @@ void scan(int argc, char** argv) {
     const auto output = required_arg(argc, argv, "--output");
     const auto summary = required_arg(argc, argv, "--summary");
     const auto release = required_arg(argc, argv, "--release-id");
-    if (argc != 15 || release.empty()) {
-        throw std::runtime_error("expected seven nonempty named arguments");
+    std::string fragment_policy = "exclude";
+    if (argc != 15 && argc != 17) {
+        throw std::runtime_error("expected seven or eight named arguments");
+    }
+    if (argc == 17) {
+        fragment_policy = required_arg(argc, argv, "--fragment-policy");
+    }
+    if (release.empty() || (fragment_policy != "include" &&
+                            fragment_policy != "exclude")) {
+        throw std::runtime_error("invalid release or fragment policy");
     }
     for (int i = 1; i < argc; i += 2) {
         const std::string arg(argv[i]);
         if (arg != "--targets" && arg != "--target-taxonomy" &&
             arg != "--ox-taxonomy" && arg != "--fasta" &&
             arg != "--output" && arg != "--summary" &&
-            arg != "--release-id") {
+            arg != "--release-id" && arg != "--fragment-policy") {
             throw std::runtime_error("unsupported argument: " + arg);
         }
     }
@@ -273,7 +287,7 @@ void scan(int argc, char** argv) {
         }
         if (frag == "1") {
             ++counts.fragments;
-            return;
+            if (fragment_policy == "exclude") return;
         }
         const auto raw_ox = token(header, "OX");
         if (!decimal(raw_ox)) {
@@ -291,8 +305,11 @@ void scan(int argc, char** argv) {
             return;
         }
         if (!valid_sequence(sequence)) {
-            ++counts.ambiguous;
+            ++counts.invalid_alphabet;
             return;
+        }
+        if (sequence.find_first_of("BJXZ") != std::string::npos) {
+            ++counts.ambiguous_observed;
         }
         const auto found = index.find(sequence);
         if (found == index.end()) return;
@@ -300,12 +317,18 @@ void scan(int argc, char** argv) {
         const auto acc = accession(header);
         if (acc.empty()) throw std::runtime_error("missing UniProt accession");
         for (const auto& t : found->second) {
-            if (t.species != tax.species || t.taxid == tax.resolved) continue;
+            if (t.species != tax.species) continue;
             pairs << release << '\t' << t.id << '\t' << counts.records
                   << '\t' << rid << '\t' << acc << '\t' << raw_ox << '\t'
                   << t.taxid << '\t' << tax.resolved << '\t' << tax.species
-                  << "\t0\t" << sequence.size() << "\t1\tFULL_V2_EXACT\n";
+                  << "\t" << frag << "\t" << sequence.size()
+                  << "\t1\tFULL_V2_EXACT\n";
             ++row_count;
+            if (t.taxid == tax.resolved) {
+                ++counts.same_taxid_matches;
+            } else {
+                ++counts.cross_strain_matches;
+            }
         }
         counts.matches += row_count;
         if (row_count != 0) ++counts.matching_records;
@@ -330,16 +353,28 @@ void scan(int argc, char** argv) {
     if (!report) throw std::runtime_error("cannot create summary TSV");
     report << "metric\tvalue\n";
     report << "release\t" << release << '\n';
+    report << "sequence_identity_policy\tliteral-iupac26-v1\n";
+    report << "taxonomic_scope\t"
+              "same_species_same_or_distinct_resolved_taxid\n";
+    report << "ambiguous_symbols_are_wildcards\t0\n";
+    report << "fragment_policy\t" << fragment_policy << '\n';
     report << "targets_indexed_sequences\t" << index.size() << '\n';
     report << "full_fasta_records\t" << counts.records << '\n';
     report << "records_missing_or_invalid_ox\t" << counts.no_ox << '\n';
     report << "records_unknown_ox\t" << counts.unknown_ox << '\n';
     report << "records_unresolved_taxonomy\t"
            << counts.unresolved_taxonomy << '\n';
-    report << "fragments_skipped\t" << counts.fragments << '\n';
-    report << "ambiguous_sequences_skipped\t" << counts.ambiguous << '\n';
+    report << "fragments_observed\t" << counts.fragments << '\n';
+    report << "fragments_skipped\t"
+           << (fragment_policy == "exclude" ? counts.fragments : 0) << '\n';
+    report << "invalid_alphabet_sequences_skipped\t"
+           << counts.invalid_alphabet << '\n';
+    report << "ambiguous_sequences_observed\t"
+           << counts.ambiguous_observed << '\n';
     report << "matched_full_records\t" << counts.matching_records << '\n';
-    report << "cross_strain_exact_pairs\t" << counts.matches << '\n';
+    report << "full_literal_exact_pairs\t" << counts.matches << '\n';
+    report << "same_taxid_exact_pairs\t" << counts.same_taxid_matches << '\n';
+    report << "cross_strain_exact_pairs\t" << counts.cross_strain_matches << '\n';
     if (!report) throw std::runtime_error("cannot write summary TSV");
 }
 

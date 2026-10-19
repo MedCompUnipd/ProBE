@@ -1,0 +1,99 @@
+{
+  "prohibitions": [
+    "Do not invoke Snakemake with this wrapper or an extracted proposed_spec.",
+    "Do not use the 128-target pilot FULL EXACT/discovery as global data.",
+    "Do not reuse legacy FULL EXACT/discovery without IUPAC26 requalification.",
+    "Do not use the pilot DP executable as an independently built global binary without build provenance.",
+    "Do not mutate previous scientific pilot outputs."
+  ],
+  "proposed_spec": {
+    "inputs": {
+      "evidence_registry": "/data/PROGENY/ProBE-v2-validated/config/stage08_evidence_registry.example.json",
+      "go_policy_bundle": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/common/01B0",
+      "lineage_index": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/common/04D1/04D1_lineage_scan_index.tsv",
+      "ontology": "/data/PROGENY/ProBE/TESTING/go.owl",
+      "targets": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/common/01/01_targets.tsv",
+      "targets_input": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/00_import_targets/targets.metadata.tsv",
+      "temporal_policy": "/data/PROGENY/ProBE-v2-validated/config/stage08_evidence_classes_v2.example.json"
+    },
+    "limits": {
+      "documentary_fragment": "allow",
+      "max_chunk_cells": 50000000,
+      "max_pair_cells": 50000000,
+      "max_total_cells": 500000000,
+      "partial_sequence": "allow",
+      "threads": 8
+    },
+    "mode": "prepare",
+    "output_root": "/data/PROGENY/ProBE-runs/canonical-v2-new",
+    "per_release": {
+      "END": {
+        "anchors": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04B/04B_classified_direct_anchors.tsv",
+        "full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_END_FULL_EXACT_PAIRS",
+        "full_manifest": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/01A_FULL/manifest.json",
+        "go_positive_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/03_species_wide_variants/56061434047dab79a2d7ba4f1896f93186b16c86237738ac55f4dcd4ee7a17f0/03_primary_candidates.pairs.tsv",
+        "goa_bundle": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/01B1",
+        "lineage": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04D2/04D2_lineage_evidence.tsv",
+        "lineage_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/04E/04E_lineage_candidates.tsv",
+        "ox_taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/02B/02B_ox_taxonomy.tsv",
+        "rescue_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/05R1/05R1_full_sequence_rescue.pairs.tsv",
+        "taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/END/02B/02B_target_taxonomy.tsv",
+        "unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_END_DISCOVERY"
+      },
+      "START": {
+        "anchors": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04B/04B_classified_direct_anchors.tsv",
+        "full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_START_FULL_EXACT_PAIRS",
+        "full_manifest": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/01A_FULL/manifest.json",
+        "go_positive_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/03_species_wide_variants/56061434047dab79a2d7ba4f1896f93186b16c86237738ac55f4dcd4ee7a17f0/03_primary_candidates.pairs.tsv",
+        "goa_bundle": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/01B1",
+        "lineage": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04D2/04D2_lineage_evidence.tsv",
+        "lineage_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/04E/04E_lineage_candidates.tsv",
+        "ox_taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/02B/02B_ox_taxonomy.tsv",
+        "rescue_pairs": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/05R1/05R1_full_sequence_rescue.pairs.tsv",
+        "taxonomy": "/data/PROGENY/ProBE-runs/pre-resolver-v2-2023_01-2026_03/work/pipeline-v2/START/02B/02B_target_taxonomy.tsv",
+        "unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_START_DISCOVERY"
+      }
+    },
+    "policy": "same_species_exact",
+    "releases": {
+      "END": "2026_03",
+      "START": "2023_01"
+    },
+    "schema": "probe-canonical-v2-dag-input-v2",
+    "scientific_contracts": {
+      "dp_backend": "certified-geometric-bounds-v2",
+      "dp_scoring": "literal-match2-mismatch-1-affine-open-3-extend-1-v1",
+      "exact_identity": "literal-iupac26-v1",
+      "nonexact_admission": "same-resolved-taxid-documentary-literal-v1"
+    },
+    "tools": {
+      "collection_cli": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/08_collect_annotations.py",
+      "finalize_script": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/06C1_finalize_directional_glocal.py",
+      "full_dp_binary": "/REPLACE_WITH_PINNED_CERTIFIED_BOUNDED_DP_V2_BINARY",
+      "m10c_cli": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/08_interpret_compact.py",
+      "nonexact_script": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/NONEXACT_select_alignment_jobs.py",
+      "stage05c2_cli": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/05C2_freeze_taxonomy_audit_channel.py",
+      "stage06a_cli": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/06A_prepare_alignment_jobs.py",
+      "temporal_cli": "/data/PROGENY/ProBE-v2-validated/scripts/pipeline/08_build_benchmark_v2.py"
+    }
+  },
+  "purpose": "Canonical V2 global source-only consolidation proposal",
+  "relocated_script_paths": 7,
+  "resolved_placeholders": 7,
+  "source_example_sha256": "bddae8f80e83a31cd1d3138901c705977e5bd00653aa30a7d9f419393f653028",
+  "source_pilot_spec_sha256": "a5eee82fbe99e4cc43bf5fab6dd4044153d4e7e1e63a914c05150fc7eff2768b",
+  "status": "BLOCKED_NOT_A_DAG_SPEC",
+  "unresolved_global_scientific_dependencies": {
+    "per_release.END.full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_END_FULL_EXACT_PAIRS",
+    "per_release.END.unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_END_DISCOVERY",
+    "per_release.START.full_exact_pairs": "/REPLACE_WITH_LITERAL_IUPAC26_START_FULL_EXACT_PAIRS",
+    "per_release.START.unified_discovery": "/REPLACE_WITH_REBUILT_LITERAL_IUPAC26_START_DISCOVERY",
+    "tools.full_dp_binary": "/REPLACE_WITH_PINNED_CERTIFIED_BOUNDED_DP_V2_BINARY"
+  },
+  "unverified_references": {
+    "GO_policy_ontology_and_GOA_bundles": "Existence previously reported; pinned checksums, schema, and manifest still required.",
+    "inputs.evidence_registry": "Path assumed under new worktree; verify SHA/content on thanos.",
+    "inputs.targets_input": "Global legacy target metadata TSV path; verify format and identity.",
+    "inputs.temporal_policy": "Path assumed under new worktree; verify SHA/content on thanos."
+  }
+}

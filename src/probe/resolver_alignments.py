@@ -186,6 +186,7 @@ def _direction(
     candidate_length: int,
     exact: bool,
     context: str,
+    expected_cells: int | None = None,
 ) -> AlignmentDirection:
     prefix = f"{side}_"
     status = row[prefix + "status"]
@@ -234,8 +235,19 @@ def _direction(
             raise ValueError(f"{context}: target-global incomplete target")
     elif result.candidate_start or result.candidate_end != candidate_length:
         raise ValueError(f"{context}: candidate-global incomplete candidate")
-    expected_cells = 0 if exact else (target_length + 1) * (candidate_length + 1)
-    if result.cells != expected_cells:
+    full_cells = (target_length + 1) * (candidate_length + 1)
+    required_cells = 0 if exact else full_cells
+    if expected_cells is not None:
+        if (
+            type(expected_cells) is not int
+            or exact
+            and expected_cells != 0
+            or not exact
+            and not 1 <= expected_cells <= full_cells
+        ):
+            raise ValueError(f"{context}: invalid certified DP-cell expectation")
+        required_cells = expected_cells
+    if result.cells != required_cells:
         raise ValueError(f"{context}: {side} DP-cell mismatch")
     if exact and (
         result.target_start
@@ -268,7 +280,12 @@ class JoinedAlignment:
 
 
 def _make_alignment(
-    job: dict, row: dict, *, exact: bool, context: str
+    job: dict,
+    row: dict,
+    *,
+    exact: bool,
+    context: str,
+    expected_cells: tuple[int, int] | None = None,
 ) -> JoinedAlignment:
     for field in _BASE:
         if row[field] != job[field]:
@@ -282,6 +299,7 @@ def _make_alignment(
         candidate_length=m,
         exact=exact,
         context=context,
+        expected_cells=None if expected_cells is None else expected_cells[0],
     )
     candidate = _direction(
         row,
@@ -290,6 +308,7 @@ def _make_alignment(
         candidate_length=m,
         exact=exact,
         context=context,
+        expected_cells=None if expected_cells is None else expected_cells[1],
     )
     exact_subsequence = (
         not exact
@@ -343,12 +362,15 @@ def collect_alignments(
     jobs_path: Path,
     alignments_path: Path,
     policy_skipped_keys: frozenset[CandidateKey] = frozenset(),
+    expected_cells: Mapping[CandidateKey, tuple[int, int]] | None = None,
 ) -> dict[CandidateKey, JoinedAlignment]:
     """Require exactly the 06A/06C1 keys permitted by frozen taxonomy.
 
     06A and 06C1 are strictly sorted by release, target and numeric rid.
     Streaming their pairwise rows avoids retaining a second million-row TSV
     mapping. Only already-validated 06C1 measurements are interpreted.
+    Certified counts must come from an independently pinned native DP plan;
+    callers without that plan retain the exact full-rectangle requirement.
     """
     expected = {
         key
@@ -368,6 +390,7 @@ def collect_alignments(
     aligned = _rows(alignments_path, _ALIGNMENT_REQUIRED)
     next_aligned = next(aligned, None)
     previous = None
+    measured_nonexact = set()
     for line, job in _rows(jobs_path, _JOB_REQUIRED):
         context = f"{jobs_path}:{line}"
         key = _key(job, context)
@@ -390,7 +413,20 @@ def collect_alignments(
         if _key(row, aln_context) != key:
             raise ValueError(f"{aln_context}: 06C1/06A pair key mismatch")
         exact = _check_job(job, candidates[key], context)
-        result[key] = _make_alignment(job, row, exact=exact, context=aln_context)
+        pair_cells = None
+        if not exact:
+            measured_nonexact.add(key)
+            if expected_cells is not None:
+                if key not in expected_cells or len(expected_cells[key]) != 2:
+                    raise ValueError(f"{context}: missing certified DP-cell plan")
+                pair_cells = expected_cells[key]
+        result[key] = _make_alignment(
+            job,
+            row,
+            exact=exact,
+            context=aln_context,
+            expected_cells=pair_cells,
+        )
         next_aligned = next(aligned, None)
     if next_aligned is not None:
         line, row = next_aligned
@@ -398,6 +434,8 @@ def collect_alignments(
             f"{alignments_path}:{line}: extra 06C1 alignment for "
             f"{_key(row, alignments_path.as_posix())}"
         )
+    if expected_cells is not None and set(expected_cells) != measured_nonexact:
+        raise ValueError("Certified DP-cell plan has missing or extra pairs")
     actual = set(result)
     if actual != set(candidates):
         missing = sorted(set(candidates) - actual)[:3]

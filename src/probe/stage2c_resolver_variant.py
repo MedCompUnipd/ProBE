@@ -1,7 +1,7 @@
 """Stage 2C cross-strain donor policy over verified Stage 07 evidence.
 
 Preserve Stage 07 decisions outside the cross-subtaxon exact gate. Under
-same_species_exact, nonambiguous full-sequence identity and verified
+same_species_exact, literal IUPAC full-sequence identity and verified
 same-species taxonomy suffice without additional locus evidence.
 Fragment-specific safeguards remain independent.
 """
@@ -15,7 +15,7 @@ from typing import Literal
 from probe.cross_strain import (
     StrainGateInput,
     assess_strain_gate,
-    unambiguous_protein,
+    literal_protein,
 )
 from probe.resolver import (
     ResolverDecision,
@@ -83,7 +83,8 @@ def _override(
         warnings=tuple(sorted(warnings | {warning})),
         audit_outcome=(
             "EVALUATED_UNDER_CROSS_STRAIN_EXACT_POLICY"
-            if decision == "ACCEPTED" and (
+            if decision == "ACCEPTED"
+            and (
                 old.source_scope == "TAXONOMY_AUDIT"
                 or previous.candidate.overlap_audit is not None
             )
@@ -193,11 +194,8 @@ def resolve_stage2c_variant(
                     raise ValueError(f"Stage 06A/literal sequence conflict: {key}")
                 if (
                     current[key].decision.decision != "ACCEPTED"
-                    and unambiguous_protein(target_sequence)
-                    and (
-                        not candidate.fragment_record
-                        or _documentary_fragment(fact)
-                    )
+                    and literal_protein(target_sequence)
+                    and (not candidate.fragment_record or _documentary_fragment(fact))
                 ):
                     current[key] = _override(
                         current[key],
