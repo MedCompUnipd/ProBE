@@ -1,0 +1,8 @@
+source=/data/PROGENY/ProBE-v2-validated/cpp/src/probe_directional_glocal_bounded_dp_v2.cpp
+source_sha256=b9389eece639e5f4828731ef675ee3939a2871e224a263d8d00c5ba777d3b160
+compiler=/usr/bin/g++
+g++ (Debian 12.2.0-14+deb12u1) 12.2.0
+flags=-O2 -std=c++17 -fopenmp
+binary=/data/PROGENY/ProBE-v2-validated/.pixi/build/probe-certified-bounded-dp-v2/certified-bounded-dp
+binary_sha256=11d182288384ded504c627ff79f6eb5037a93f1efb430159ac1c90fd089da927
+source_commit=befb2b2abd13b6e5c0da7bb64bf715e72baef84d
