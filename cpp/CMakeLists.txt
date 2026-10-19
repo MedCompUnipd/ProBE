@@ -71,3 +71,13 @@ add_executable(
     probe-full-exact-cross-strain-v1
     src/probe_full_exact_cross_strain_v1.cpp
 )
+
+# FIX1 canonical V2 certified bounded affine DP backend.
+add_executable(
+    probe-directional-glocal-bounded-dp-v2
+    src/probe_directional_glocal_bounded_dp_v2.cpp
+)
+target_link_libraries(
+    probe-directional-glocal-bounded-dp-v2
+    PRIVATE OpenMP::OpenMP_CXX
+)

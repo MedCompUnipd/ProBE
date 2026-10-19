@@ -48,3 +48,10 @@ original repository and is not yet an independently provisioned
 environment for this worktree.
 
 No previous scientific outputs may be modified.
+
+## Post-baseline repository closure
+
+The manual bounded DP executable was reproduced byte-for-byte from the
+FIX1 source (see `PROBE_CANONICAL_V2_DP_BUILD_PROVENANCE.txt`). The CMake
+and Pixi build target was added subsequently. Global execution remains
+BLOCKED for the release-local discovery artifacts and upstream provenance.
