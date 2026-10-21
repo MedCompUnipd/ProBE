@@ -4,7 +4,12 @@ import csv
 import subprocess
 from pathlib import Path
 
-from probe.stage2c_full_exact import OUTPUT_BASENAME, read_plan, sha256
+from probe.stage2c_full_exact import (
+    OUTPUT_BASENAME,
+    read_plan,
+    sha256,
+    validate_scanner_summary,
+)
 from probe.workflow.artifacts import atomic_stage_bundle, validate_bundle
 from probe.workflow.runtime import input_artifact, runtime_environment
 
@@ -85,6 +90,8 @@ parameters = {
         f"<stage-bundle>/{summary_name}",
         "--release-id",
         release,
+        "--fragment-policy",
+        plan["parameters"]["fragment"],
     ],
 }
 implementation = {
@@ -128,6 +135,8 @@ with (
         str(staging / summary_name),
         "--release-id",
         release,
+        "--fragment-policy",
+        plan["parameters"]["fragment"],
     ]
     subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
     with (staging / summary_name).open(encoding="utf-8") as stream:
@@ -135,10 +144,12 @@ with (
         if next(reader, None) != ["metric", "value"]:
             raise ValueError("Invalid FULL exact scanner summary header")
         metrics = dict(reader)
-    if metrics.get("release") != release:
-        raise ValueError("FULL exact scanner release mismatch")
-    int(metrics["cross_strain_exact_pairs"])
-    int(metrics["full_fasta_records"])
+    validate_scanner_summary(metrics, release=release)
+    if (
+        metrics.get("fragment_policy") != plan["parameters"]["fragment"]
+        or metrics.get("fragments_skipped") != "0"
+    ):
+        raise ValueError("FULL exact scanner fragment policy mismatch")
     expected = {pairs_name, summary_name}
     actual = {
         file.relative_to(staging).as_posix()

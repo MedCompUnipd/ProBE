@@ -81,7 +81,7 @@ def read_dag_spec(path: Path) -> dict:
     if not path.is_file() or path.is_symlink():
         raise ValueError("Missing or unsafe canonical V2 DAG specification")
     data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or set(data) != {
+    required_keys = {
         "schema",
         "mode",
         "policy",
@@ -92,8 +92,21 @@ def read_dag_spec(path: Path) -> dict:
         "tools",
         "limits",
         "scientific_contracts",
-    }:
+    }
+    if (
+        not isinstance(data, dict)
+        or not required_keys.issubset(data)
+        or set(data) - required_keys - {"content_identity_sha256"}
+    ):
         raise ValueError("Unexpected canonical V2 DAG specification keys")
+    if "content_identity_sha256" in data:
+        identity = data["content_identity_sha256"]
+        if (
+            not isinstance(identity, str)
+            or len(identity) != 64
+            or any(character not in "0123456789abcdef" for character in identity)
+        ):
+            raise ValueError("Invalid canonical scientific content identity SHA256")
     if data["schema"] != VERSION or data["mode"] not in {
         "prepare",
         "execute",
@@ -187,6 +200,10 @@ def discovery_fingerprint(spec: dict) -> str:
             if name not in {"partial_sequence", "documentary_fragment"}
         },
     }
+    # Existing published V2 specifications retain their exact fingerprint.
+    # Fresh executions opt into content-certified upstream/source identities.
+    if "content_identity_sha256" in spec:
+        params["content_identity_sha256"] = spec["content_identity_sha256"]
     encoded = json.dumps(params, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 

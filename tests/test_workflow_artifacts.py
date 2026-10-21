@@ -54,7 +54,8 @@ def test_failed_or_concurrent_publication_never_replaces_bundle(tmp_path, metada
         (staging / "partial").write_text("incomplete")
         raise RuntimeError("interrupted producer")
     assert not destination.exists()
-    assert not list(tmp_path.iterdir())
+    # The persistent inode anchors advisory ownership and must not be unlinked.
+    assert list(tmp_path.iterdir()) == [tmp_path / ".bundle.publish-lock"]
     with atomic_stage_bundle(destination, **metadata) as staging:
         with (
             pytest.raises(FileExistsError),
@@ -141,9 +142,7 @@ def test_bundle_rejects_undeclared_payload(tmp_path, metadata):
         artifacts.validate_bundle(destination)
 
 
-def test_optional_output_hashing_is_not_used_for_normal_validation(
-    tmp_path, metadata
-):
+def test_optional_output_hashing_is_not_used_for_normal_validation(tmp_path, metadata):
     destination = tmp_path / "bundle"
 
     with atomic_stage_bundle(
@@ -160,9 +159,7 @@ def test_optional_output_hashing_is_not_used_for_normal_validation(
         artifacts.validate_bundle(destination, deep=True)
 
 
-def test_atomic_publication_fsyncs_stage_and_parent(
-    tmp_path, metadata, monkeypatch
-):
+def test_atomic_publication_fsyncs_stage_and_parent(tmp_path, metadata, monkeypatch):
     calls = []
 
     monkeypatch.setattr(
@@ -181,9 +178,7 @@ def test_atomic_publication_fsyncs_stage_and_parent(
     assert calls[1] == tmp_path
 
 
-def test_manifest_allows_no_ontology_for_pre_ontology_stage(
-    tmp_path, metadata
-):
+def test_manifest_allows_no_ontology_for_pre_ontology_stage(tmp_path, metadata):
     metadata = dict(metadata)
     metadata["ontology"] = None
     metadata["stage"] = "01A_FULL"
@@ -202,9 +197,7 @@ def test_manifest_allows_no_ontology_for_pre_ontology_stage(
     assert manifest.ontology is None
 
 
-def test_empty_precreated_destination_can_be_published_atomically(
-    tmp_path, metadata
-):
+def test_empty_precreated_destination_can_be_published_atomically(tmp_path, metadata):
     destination = tmp_path / "bundle"
     destination.mkdir()
 
@@ -218,11 +211,7 @@ def test_empty_precreated_destination_can_be_published_atomically(
     manifest = artifacts.validate_bundle(destination, deep=True)
 
     assert manifest.status == "complete"
-    assert (destination / "facts.tsv").read_text(
-        encoding="utf-8"
-    ) == "complete\n"
-
-
+    assert (destination / "facts.tsv").read_text(encoding="utf-8") == "complete\n"
 
 
 def test_invalidated_bundle_can_be_recomputed(tmp_path, metadata):
@@ -259,9 +248,7 @@ def test_invalidated_bundle_can_be_recomputed(tmp_path, metadata):
         (staging / "facts.tsv").write_text("new\n", encoding="utf-8")
 
     artifacts.validate_bundle(destination, deep=True)
-    assert (destination / "facts.tsv").read_text(
-        encoding="utf-8"
-    ) == "new\n"
+    assert (destination / "facts.tsv").read_text(encoding="utf-8") == "new\n"
 
 
 def test_complete_bundle_is_never_overwritten(tmp_path, metadata):
@@ -270,9 +257,12 @@ def test_complete_bundle_is_never_overwritten(tmp_path, metadata):
     with atomic_stage_bundle(destination, **metadata) as staging:
         (staging / "facts.tsv").write_text("old\n", encoding="utf-8")
 
-    with pytest.raises(FileExistsError), atomic_stage_bundle(
-        destination,
-        allow_invalidated_destination=True,
-        **metadata,
+    with (
+        pytest.raises(FileExistsError),
+        atomic_stage_bundle(
+            destination,
+            allow_invalidated_destination=True,
+            **metadata,
+        ),
     ):
         pass

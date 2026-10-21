@@ -16,8 +16,10 @@ from probe.stage2c_discovery import read_plan as read_species_plan
 from probe.stage2c_full_exact import read_plan as read_full_plan
 from probe.workflow.artifacts import StageManifest, validate_bundle
 
-SCHEMA = "probe-stage2c-union-plan-v2"
-SCIENCE = "species-wide-go-positive-plus-full-literal-exact-all-taxids-v2"
+SCHEMA = "probe-stage2c-union-plan-v3"
+SCIENCE = (
+    "species-wide-go-positive-plus-full-literal-exact-all-taxids-with-fragments-v3"
+)
 ROLES = ("START", "END")
 CODE_FILES = (
     "src/probe/stage2c_candidate_union.py",
@@ -92,6 +94,7 @@ def build_plan(repo: Path, species_path: Path, full_path: Path) -> dict:
         "taxonomy": taxonomy,
         "releases": releases,
         "code": code,
+        "parameters": {"allow_literal_fragments": True},
     }
     key = _key(identity)
     paths = {

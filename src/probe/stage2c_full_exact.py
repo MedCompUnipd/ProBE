@@ -16,8 +16,8 @@ from pathlib import Path
 from probe.workflow.artifacts import StageManifest, validate_bundle
 
 ROLES = ("START", "END")
-SCHEMA = "probe-stage2c-full-exact-plan-v3"
-SCIENCE = "same-species-all-taxids-literal-iupac26-exact-v3"
+SCHEMA = "probe-stage2c-full-exact-plan-v4"
+SCIENCE = "same-species-all-taxids-literal-iupac26-exact-with-fragments-v4"
 FULL_EXACT_SCOPE = "same_species_same_or_distinct_resolved_taxid"
 CODE_FILES = (
     "cpp/src/probe_full_exact_cross_strain_v1.cpp",
@@ -164,7 +164,7 @@ def build_plan(repo: Path, run: Path) -> dict:
             "scope": FULL_EXACT_SCOPE,
             "identity": "full_sequence_literal_exact",
             "independent_of_go_positive": True,
-            "fragment": "exclude",
+            "fragment": "include",
             "residue_policy": "literal_iupac26",
             "ambiguous_symbols_are_wildcards": False,
         },

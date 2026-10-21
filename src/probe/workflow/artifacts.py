@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import errno
+import fcntl
 import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import tempfile
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -20,20 +23,14 @@ _DIGEST = re.compile(r"[0-9a-f]{64}")
 
 
 def _utc_now() -> str:
-    return (
-        datetime.now(UTC)
-        .isoformat()
-        .replace("+00:00", "Z")
-    )
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _validate_utc_timestamp(value: str) -> None:
     if not isinstance(value, str) or not value:
         raise ValueError("created_at_utc must be a nonempty timestamp")
     try:
-        parsed = datetime.fromisoformat(
-            value.replace("Z", "+00:00")
-        )
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as error:
         raise ValueError("invalid created_at_utc timestamp") from error
     if parsed.tzinfo is None:
@@ -47,6 +44,47 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(fd)
     finally:
         os.close(fd)
+
+
+def _acquire_publication_lock(path: Path) -> int:
+    """Acquire a kernel-owned lock on a persistent sibling file.
+
+    Never unlink this file: replacing its inode can admit two publishers.
+    A legacy directory lock is intentionally not removed or treated as stale;
+    it may belong to a live publisher using the previous locking protocol.
+    """
+    flags = os.O_CREAT | os.O_RDWR
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags, 0o666)
+    except IsADirectoryError as error:
+        raise FileExistsError(
+            errno.EEXIST, "legacy publication lock directory exists", str(path)
+        ) from error
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise FileExistsError(
+                errno.EEXIST, "publication lock must be a regular file", str(path)
+            )
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EAGAIN}:
+                raise
+            raise FileExistsError(
+                errno.EEXIST, "publication already has an active writer", str(path)
+            ) from error
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _release_publication_lock(descriptor: int) -> None:
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
 
 
 def sha256_file(path: Path) -> str:
@@ -217,19 +255,13 @@ def validate_bundle(bundle: Path, *, deep: bool = False) -> StageManifest:
         path = bundle / item.path
 
         if not path.is_file() or path.stat().st_size != item.size_bytes:
-            raise ValueError(
-                f"missing or size-mismatched artifact: {item.path}"
-            )
+            raise ValueError(f"missing or size-mismatched artifact: {item.path}")
 
         if deep:
             if item.sha256 is None:
-                raise ValueError(
-                    f"missing SHA256 for deep validation: {item.path}"
-                )
+                raise ValueError(f"missing SHA256 for deep validation: {item.path}")
             if sha256_file(path) != item.sha256:
-                raise ValueError(
-                    f"mismatched SHA256: {item.path}"
-                )
+                raise ValueError(f"mismatched SHA256: {item.path}")
 
     return manifest
 
@@ -251,7 +283,11 @@ def atomic_stage_bundle(
 ) -> Iterator[Path]:
     """Publish a new immutable bundle by one same-filesystem directory rename.
 
-    A sibling lock prevents concurrent publishers. An existing empty directory is
+    A sibling advisory lock prevents concurrent publishers. The lock file stays
+    in place; the kernel releases ownership when its descriptors are closed,
+    including after a producer is killed. It is not a completion marker. A lock
+    directory from the previous protocol remains an explicit conflict.
+    An existing empty directory is
     treated as an orchestration-created placeholder. A nonempty destination whose
     manifest has been removed by the workflow may be cleared explicitly before
     recomputation; a complete published bundle is never overwritten.
@@ -259,7 +295,7 @@ def atomic_stage_bundle(
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     lock = destination.with_name(f".{destination.name}.publish-lock")
-    lock.mkdir()  # Exclusive across cooperating writers.
+    lock_descriptor = _acquire_publication_lock(lock)
     staging: Path | None = None
     try:
         if destination.is_symlink():
@@ -321,6 +357,8 @@ def atomic_stage_bundle(
         # Persist the directory rename itself.
         _fsync_directory(destination.parent)
     finally:
-        if staging is not None and staging.exists():
-            shutil.rmtree(staging)
-        lock.rmdir()
+        try:
+            if staging is not None and staging.exists():
+                shutil.rmtree(staging)
+        finally:
+            _release_publication_lock(lock_descriptor)

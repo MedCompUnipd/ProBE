@@ -85,6 +85,7 @@ parameters = {
     "release": release,
     "go_positive_scan": plan["species_key"],
     "full_exact_scan": plan["full_key"],
+    "allow_literal_fragments": True,
 }
 log_path = Path(context.log[0])
 log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -110,5 +111,6 @@ with (
         full_exact_pairs=manifests["full"].parent / required["full"],
         output=staging / PAIRS,
         summary=staging / SUMMARY,
+        allow_literal_fragments=True,
     )
     log.write(str(report) + "\n")
