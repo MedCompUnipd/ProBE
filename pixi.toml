@@ -59,3 +59,5 @@ full-exact-cross-strain-v1 = ".pixi/build/probe-full-exact-cross-strain/probe-fu
 # Canonical V2 certified bounded DP, separate from legacy full DP V1.
 build-certified-bounded-dp-v2 = "cmake -S cpp -B .pixi/build/probe-certified-bounded-dp-v2-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build .pixi/build/probe-certified-bounded-dp-v2-cmake --target probe-directional-glocal-bounded-dp-v2"
 certified-bounded-dp-v2 = ".pixi/build/probe-certified-bounded-dp-v2-cmake/probe-directional-glocal-bounded-dp-v2"
+build-certified-rolling-dp-v1 = "cmake -S cpp -B .pixi/build/probe-certified-rolling-dp-v1-cmake -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build .pixi/build/probe-certified-rolling-dp-v1-cmake --target probe-directional-glocal-linear-dp-v1"
+certified-rolling-dp-v1 = ".pixi/build/probe-certified-rolling-dp-v1-cmake/probe-directional-glocal-linear-dp-v1"

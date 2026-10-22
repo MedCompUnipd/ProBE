@@ -239,11 +239,18 @@ rule release_local_dp:
         lineage_end=input_for(END, "lineage"),
         nonexact=tool("nonexact_script"),
         binary=tool("full_dp_binary"),
+        linear_binary=(
+            [V2["large_dp"]["binary"]] if "large_dp" in V2 else []
+        ),
         finalize=tool("finalize_script")
     output:
         receipt(node("alignment"))
     threads:
         V2["limits"]["threads"]
+    resources:
+        mem_mb=(
+            V2.get("large_dp", {}).get("max_dp_memory_bytes", 0) + 999_999
+        ) // 1_000_000
     run:
         dispatch(spec=V2, stage="alignment", target=Path(node("alignment")))
         publish_receipt(

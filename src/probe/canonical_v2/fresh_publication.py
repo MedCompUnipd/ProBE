@@ -395,6 +395,8 @@ def expected_summary_inputs(spec: dict, stage: str, role: str | None) -> dict:
                 for which in ("START", "END")
             },
         }
+        if "large_dp" in spec:
+            paths["linear_dp_binary"] = Path(spec["large_dp"]["binary"])
     else:
         raise ValueError(f"No summary input adapter for stage {stage}")
     for path in paths.values():

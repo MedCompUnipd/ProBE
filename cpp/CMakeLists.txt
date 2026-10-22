@@ -81,3 +81,13 @@ target_link_libraries(
     probe-directional-glocal-bounded-dp-v2
     PRIVATE OpenMP::OpenMP_CXX
 )
+
+# Exact bounded-memory continuation; the frozen bounded TU is included verbatim.
+add_executable(
+    probe-directional-glocal-linear-dp-v1
+    src/probe_directional_glocal_linear_dp_v1.cpp
+)
+target_link_libraries(
+    probe-directional-glocal-linear-dp-v1
+    PRIVATE OpenMP::OpenMP_CXX
+)

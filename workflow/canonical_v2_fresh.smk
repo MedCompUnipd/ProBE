@@ -436,7 +436,14 @@ rule fresh_canonical_common:
     threads:
         lambda w: FRESH.data["limits"]["threads"] if w.stage == "alignment" else 1
     resources:
-        dataset_io=1
+        dataset_io=1,
+        mem_mb=lambda w: (
+            (
+                FRESH.data.get("large_dp", {}).get("max_dp_memory_bytes", 0)
+                + 999_999
+            ) // 1_000_000
+            if w.stage == "alignment" else 0
+        )
     run:
         spec = read_dag_spec(SPEC_PATH)
         validate_requested_node(spec, str(output[0]), wildcards.stage, None)

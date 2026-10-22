@@ -176,6 +176,15 @@ def _rows(path):
     return [row.split("\t") for row in path.read_text().splitlines()]
 
 
+def _assert_no_08_staging_leaks(tmp_path: Path) -> None:
+    remaining = {
+        path.name for path in tmp_path.iterdir() if path.name.startswith(".08.")
+    }
+    assert remaining == {".08.publish-lock"}
+    lock = tmp_path / ".08.publish-lock"
+    assert lock.is_file() and not lock.is_symlink()
+
+
 def test_atomic_shared_bundle_provenance_and_counts(tmp_path):
     paths = _setup(tmp_path)
     manifest = _run(paths)
@@ -196,7 +205,7 @@ def test_atomic_shared_bundle_provenance_and_counts(tmp_path):
     assert manifest.implementation["source_sha256"]
     assert manifest.ontology["sha256"]
     assert len(list(root.rglob("manifest.json"))) == 1
-    assert not any(path.name.startswith(".08.") for path in tmp_path.iterdir())
+    _assert_no_08_staging_leaks(tmp_path)
 
 
 def test_original_source_and_authorizations_are_preserved(tmp_path):
@@ -240,7 +249,7 @@ def test_end_scan_failure_cannot_publish_partial_start(tmp_path):
     with pytest.raises(ValueError, match="SHA256"):
         _run(paths)
     assert not paths["destination"].exists()
-    assert not any(path.name.startswith(".08.") for path in tmp_path.iterdir())
+    _assert_no_08_staging_leaks(tmp_path)
 
 
 def test_mid_transaction_exception_publishes_nothing(tmp_path, monkeypatch):
@@ -256,7 +265,7 @@ def test_mid_transaction_exception_publishes_nothing(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="simulated"):
         _run(paths)
     assert not paths["destination"].exists()
-    assert not any(path.name.startswith(".08.") for path in tmp_path.iterdir())
+    _assert_no_08_staging_leaks(tmp_path)
 
 
 def test_both_scans_finish_but_input_changes_before_publication(tmp_path, monkeypatch):

@@ -24,6 +24,7 @@ from probe.canonical_v2.dag_contract import (
     VERSION,
     destination,
     read_dag_spec,
+    validate_large_dp,
 )
 from probe.workflow.artifacts import StageManifest, sha256_file, validate_bundle
 from probe.workflow.config import PipelineConfig
@@ -201,7 +202,12 @@ def read_recipe(path: Path, *, expected_repo: Path | None = None) -> FreshRecipe
         "evidence_registry",
         "temporal_policy",
     }
-    if not isinstance(data, dict) or set(data) != keys or data["schema"] != SCHEMA:
+    if (
+        not isinstance(data, dict)
+        or not keys.issubset(data)
+        or set(data) - keys - {"large_dp"}
+        or data["schema"] != SCHEMA
+    ):
         raise ValueError("Unsupported or incomplete fresh recipe")
     if (
         not isinstance(data["identity_sha256"], str)
@@ -216,6 +222,13 @@ def read_recipe(path: Path, *, expected_repo: Path | None = None) -> FreshRecipe
         raise ValueError("Fresh source/run root must be physical absolute directories")
     if expected_repo is not None and repo != expected_repo.resolve(strict=True):
         raise ValueError("Fresh recipe selects a different source checkout")
+    if "large_dp" in data:
+        option = validate_large_dp(data["large_dp"])
+        if not Path(option["binary"]).is_relative_to(repo):
+            raise ValueError("Fresh exact large-DP binary is outside the snapshot")
+        scratch = Path(option["scratch_root"])
+        if scratch == run or run in scratch.parents or scratch in run.parents:
+            raise ValueError("Fresh DP scratch and scientific run roots overlap")
     config_path = _absolute(data["pipeline_config"], "pipeline_config")
     if config_path != run / "pipeline.stage08.collection.yaml":
         raise ValueError(
@@ -472,6 +485,7 @@ def canonical_sources(recipe: FreshRecipe, plans: dict[str, dict]) -> dict:
         "per_release": per_release,
         "tools": dict(data["tools"]),
         "limits": dict(data["limits"]),
+        **({"large_dp": dict(data["large_dp"])} if "large_dp" in data else {}),
     }
 
 
@@ -507,6 +521,8 @@ def content_identity(
         "pipeline_config": recipe.data["pipeline_config"],
         **{f"tool:{name}": path for name, path in recipe.data["tools"].items()},
     }
+    if "large_dp" in recipe.data:
+        inputs["tool:linear_dp_binary"] = recipe.data["large_dp"]["binary"]
     observed = {}
     for label, name in inputs.items():
         path = Path(name)
@@ -806,6 +822,8 @@ def node_dependencies(spec: dict, stage: str, role: str | None = None) -> list[s
             tools["full_dp_binary"],
             tools["finalize_script"],
         ]
+        if "large_dp" in spec:
+            deps.append(spec["large_dp"]["binary"])
     elif stage == "stage07":
         deps = [
             marker("workload"),

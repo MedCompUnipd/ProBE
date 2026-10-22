@@ -76,6 +76,40 @@ def validate_scientific_contracts(spec: dict) -> None:
         raise ValueError("Missing or unsupported canonical scientific contracts")
 
 
+def validate_large_dp(value: object) -> dict:
+    """Validate execution resources without reading scientific inputs."""
+    if not isinstance(value, dict) or set(value) != {
+        "binary",
+        "max_dp_memory_bytes",
+        "checkpoint_rows",
+        "scratch_root",
+    }:
+        raise ValueError("Incomplete exact large-DP configuration")
+    binary = _path(value["binary"], "large_dp.binary")
+    scratch = _path(value["scratch_root"], "large_dp.scratch_root")
+    if scratch == Path("/") or scratch.is_symlink():
+        raise ValueError("Unsafe exact large-DP scratch root")
+    if binary == scratch or scratch in binary.parents:
+        raise ValueError("Exact large-DP executable cannot be a scratch product")
+    for label in ("max_dp_memory_bytes", "checkpoint_rows"):
+        if type(value[label]) is not int or value[label] < 1:
+            raise ValueError(f"Invalid exact large-DP resource: {label}")
+    return value
+
+
+def large_dp_arguments(spec: dict) -> dict:
+    """Pass configured execution resources to the numerical stage."""
+    if "large_dp" not in spec:
+        return {}
+    value = validate_large_dp(spec["large_dp"])
+    return {
+        "linear_dp_binary": Path(value["binary"]),
+        "max_dp_memory_bytes": value["max_dp_memory_bytes"],
+        "dp_checkpoint_rows": value["checkpoint_rows"],
+        "dp_scratch_root": Path(value["scratch_root"]),
+    }
+
+
 def read_dag_spec(path: Path) -> dict:
     """Reject unknown options, missing release identities and unsafe roots."""
     if not path.is_file() or path.is_symlink():
@@ -96,7 +130,7 @@ def read_dag_spec(path: Path) -> dict:
     if (
         not isinstance(data, dict)
         or not required_keys.issubset(data)
-        or set(data) - required_keys - {"content_identity_sha256"}
+        or set(data) - required_keys - {"content_identity_sha256", "large_dp"}
     ):
         raise ValueError("Unexpected canonical V2 DAG specification keys")
     if "content_identity_sha256" in data:
@@ -145,6 +179,14 @@ def read_dag_spec(path: Path) -> dict:
     root = _path(data["output_root"], "output_root")
     if root == Path("/") or root.is_symlink():
         raise ValueError("Unsafe output root")
+    if "large_dp" in data:
+        option = validate_large_dp(data["large_dp"])
+        binary = Path(option["binary"])
+        scratch = Path(option["scratch_root"])
+        if binary == root or root in binary.parents:
+            raise ValueError("Exact large-DP source lies inside output root")
+        if scratch == root or root in scratch.parents or scratch in root.parents:
+            raise ValueError("DP scratch and scientific output roots overlap")
     for group in (data["inputs"], data["tools"], *specific.values()):
         for label, value in group.items():
             source = _path(value, label)
@@ -204,6 +246,8 @@ def discovery_fingerprint(spec: dict) -> str:
     # Fresh executions opt into content-certified upstream/source identities.
     if "content_identity_sha256" in spec:
         params["content_identity_sha256"] = spec["content_identity_sha256"]
+    if "large_dp" in spec:
+        params["large_dp"] = validate_large_dp(spec["large_dp"])
     encoded = json.dumps(params, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 

@@ -8,6 +8,7 @@ No locus equivalence or GO donor decision is made here.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import shutil
@@ -27,6 +28,14 @@ from probe.canonical_v2.bounded_dp import (
 from probe.canonical_v2.documentary_handoff import EVIDENCE_FIELDS
 from probe.canonical_v2.documentary_science import read_documentary_facts
 from probe.canonical_v2.exact_documentary_registry import _gene_keys
+from probe.canonical_v2.large_dp import (
+    BACKEND as EXECUTION_BACKEND,
+)
+from probe.canonical_v2.large_dp import (
+    ROUTING,
+    execute_large_dp,
+    plan_large_dp,
+)
 from probe.canonical_v2.release_workload import EVIDENCE
 from probe.resolver import is_known_nonidentifying_locus
 from probe.resolver_anchors import _load_target_taxonomy
@@ -559,24 +568,33 @@ def _save_budget_failure(
     input_paths: dict[str, Path],
     pins: dict[str, str],
     limits: dict,
+    scratch_root: Path | None = None,
 ) -> Path:
     """Keep the complete selection and plan outside any scientific publication."""
     diagnostic = Path(
         tempfile.mkdtemp(
             prefix=f"{destination.name}.dp-budget-failure-",
-            dir=destination.parent,
+            dir=scratch_root or destination.parent,
         )
     )
     copied = {}
-    for name in (NONEXACT, POLICY_SKIP, NONEXACT_SUMMARY, PLAN):
+    for name in (NONEXACT, POLICY_SKIP, NONEXACT_SUMMARY, PLAN, ROUTING):
         source = product / name
         if source.is_file() and not source.is_symlink():
             shutil.copyfile(source, diagnostic / name)
             copied[name] = sha256(diagnostic / name)
     current = {name: sha256(path) for name, path in input_paths.items()}
     report = {
-        "status": "INCOMPLETE_BUDGET",
-        "phase": "CERTIFIED_DP_PLANNING",
+        "status": (
+            "INCOMPLETE_MEMORY"
+            if str(error).startswith("INCOMPLETE_MEMORY")
+            else "INCOMPLETE_BUDGET"
+        ),
+        "phase": (
+            "EXACT_DP_RESOURCE_PLANNING"
+            if ROUTING in copied
+            else "CERTIFIED_DP_PLANNING"
+        ),
         "scientific_output_published": False,
         "dp_executed": False,
         "error": str(error),
@@ -612,10 +630,16 @@ def execute_alignment_v2(
     max_pair_cells: int = 50_000_000,
     max_total_cells: int = 500_000_000,
     max_chunk_cells: int | None = None,
+    linear_dp_binary: Path | None = None,
+    max_dp_memory_bytes: int = 536_870_912,
+    dp_checkpoint_rows: int = 256,
+    dp_scratch_root: Path | None = None,
 ) -> dict:
     """Compute canonical 06C with reference or certified-region exact DP."""
     if dp_backend not in {"full_reference_v1", BACKEND}:
         raise ValueError("Unknown canonical DP backend")
+    if linear_dp_binary is not None and dp_backend != BACKEND:
+        raise ValueError("Automatic large DP requires certified geometry")
     if any(
         not isinstance(value, int) or isinstance(value, bool) or value < 1
         for value in (threads, max_pair_cells, max_total_cells)
@@ -646,6 +670,33 @@ def execute_alignment_v2(
         raise FileExistsError("Canonical DP output already exists")
     if not destination.parent.is_dir() or destination.parent.is_symlink():
         raise ValueError("Canonical DP output parent unsafe")
+    scratch = destination.parent
+    checkpoint_root = destination.parent / f"{destination.name}.dp-checkpoints"
+    environment = os.environ.copy()
+    if linear_dp_binary is not None:
+        if (
+            not linear_dp_binary.is_file()
+            or linear_dp_binary.is_symlink()
+            or not os.access(linear_dp_binary, os.X_OK)
+        ):
+            raise ValueError("Missing or unsafe exact rolling executable")
+        for value in (max_dp_memory_bytes, dp_checkpoint_rows):
+            if type(value) is not int or value < 1:
+                raise ValueError("Invalid exact rolling resources")
+        scratch = dp_scratch_root or Path("/data/PROGENY/tmp/probe-v2-scratch")
+        if (
+            not scratch.is_absolute()
+            or ".." in scratch.parts
+            or scratch.is_symlink()
+            or scratch.resolve() != scratch
+        ):
+            raise ValueError("Unsafe exact rolling scratch root")
+        scratch.mkdir(parents=True, exist_ok=True)
+        if scratch.stat().st_dev != destination.parent.stat().st_dev:
+            raise ValueError("DP scratch and publication require one filesystem")
+        identity = hashlib.sha256(str(destination.resolve()).encode()).hexdigest()
+        checkpoint_root = scratch / "checkpoints" / identity
+        environment.update(dict.fromkeys(("TMPDIR", "TMP", "TEMP"), str(scratch)))
     input_paths = {
         "workload_summary": workload / "2C_alignment_preview.summary.json",
         "targets": targets,
@@ -656,6 +707,8 @@ def execute_alignment_v2(
         **{f"workload_{name}": path for name, path in paths.items()},
     }
     documentary_sources = {}
+    if linear_dp_binary is not None:
+        input_paths["linear_dp_binary"] = linear_dp_binary
     evidence = workload / EVIDENCE
     if evidence.exists() or EVIDENCE in summary.get("output_sha256", {}):
         if (
@@ -677,7 +730,7 @@ def execute_alignment_v2(
         input_paths[name] = path
     pins = {name: sha256(path) for name, path in input_paths.items()}
     with tempfile.TemporaryDirectory(
-        prefix="probe-canonical-v2-dp-", dir=destination.parent
+        prefix="probe-canonical-v2-dp-", dir=scratch
     ) as temporary:
         product = Path(temporary) / "product"
         product.mkdir()
@@ -700,6 +753,7 @@ def execute_alignment_v2(
                 str(product / ".nonexact.json"),
             ],
             check=True,
+            env=environment,
         )
         counts = select_nonexact_dp(
             jobs=product / ".nonexact.tsv",
@@ -729,9 +783,23 @@ def execute_alignment_v2(
         (product / ".nonexact.tsv").unlink()
         (product / ".nonexact.json").unlink()
         plan_info = None
+        execution_info = None
         if dp_backend == BACKEND:
             try:
-                plan_info = plan_bounded_dp(
+                planner = plan_bounded_dp if linear_dp_binary is None else plan_large_dp
+                automatic_options = (
+                    {}
+                    if linear_dp_binary is None
+                    else {
+                        "linear_binary": linear_dp_binary,
+                        "routing": product / ROUTING,
+                        "max_dp_memory_bytes": max_dp_memory_bytes,
+                        "checkpoint_rows": dp_checkpoint_rows,
+                        "threads": threads,
+                        "scratch_root": scratch,
+                    }
+                )
+                plan_info = planner(
                     binary=full_dp_binary,
                     jobs=product / NONEXACT,
                     targets=targets,
@@ -742,6 +810,7 @@ def execute_alignment_v2(
                     max_pair_cells=max_pair_cells,
                     max_total_cells=max_total_cells,
                     max_chunk_cells=max_chunk_cells,
+                    **automatic_options,
                 )
             except BudgetExceeded as error:
                 diagnostic = _save_budget_failure(
@@ -754,7 +823,13 @@ def execute_alignment_v2(
                         "max_pair_cells": max_pair_cells,
                         "max_total_cells": max_total_cells,
                         "max_chunk_cells": max_chunk_cells,
+                        **(
+                            {"max_dp_memory_bytes": max_dp_memory_bytes}
+                            if linear_dp_binary is not None
+                            else {}
+                        ),
                     },
+                    scratch_root=scratch if linear_dp_binary is not None else None,
                 )
                 raise ValueError(f"{error}; diagnostic={diagnostic}") from error
             pairs = plan_info["selected_pairs"]
@@ -767,7 +842,31 @@ def execute_alignment_v2(
             )
         if pairs != counts["selected"]:
             raise ValueError("DP budget count mismatch")
-        if pairs and dp_backend == BACKEND:
+        if pairs and linear_dp_binary is not None:
+            execution_info = execute_large_dp(
+                binary=full_dp_binary,
+                linear_binary=linear_dp_binary,
+                jobs=product / NONEXACT,
+                targets=targets,
+                start_store=paths[START_STORE],
+                end_store=paths[END_STORE],
+                releases=releases,
+                plan=product / PLAN,
+                routing=product / ROUTING,
+                output=product / DP_OUTPUT,
+                summary=product / DP_SUMMARY,
+                threads=threads,
+                max_pair_cells=max_pair_cells,
+                max_total_cells=max_total_cells,
+                max_chunk_cells=max_chunk_cells,
+                expected_input_sha256=plan_info["input_sha256"],
+                checkpoint_root=checkpoint_root,
+                max_dp_memory_bytes=max_dp_memory_bytes,
+                checkpoint_rows=dp_checkpoint_rows,
+                scratch_root=scratch,
+            )
+            chunks = execution_info["chunks"]
+        elif pairs and dp_backend == BACKEND:
             chunks = execute_bounded_dp(
                 binary=full_dp_binary,
                 jobs=product / NONEXACT,
@@ -783,9 +882,7 @@ def execute_alignment_v2(
                 max_total_cells=max_total_cells,
                 max_chunk_cells=max_chunk_cells,
                 expected_input_sha256=plan_info["input_sha256"],
-                checkpoint_root=(
-                    destination.parent / f"{destination.name}.dp-checkpoints"
-                ),
+                checkpoint_root=checkpoint_root,
             )
         elif pairs and max_chunk_cells is not None:
             chunks = _run_dp_chunks(
@@ -855,6 +952,7 @@ def execute_alignment_v2(
                 *finalizer_plan,
             ],
             check=True,
+            env=environment,
         )
         final_report = json.loads((product / FINAL_SUMMARY).read_text())
         if (
@@ -877,6 +975,8 @@ def execute_alignment_v2(
         }:
             raise ValueError("Certified DP input changed after planning")
         output_names = (*OUTPUTS, PLAN) if dp_backend == BACKEND else OUTPUTS
+        if linear_dp_binary is not None:
+            output_names = (*output_names, ROUTING)
         report = {
             "schema": BOUNDED_SCHEMA if dp_backend == BACKEND else SCHEMA,
             "dp_backend": dp_backend,
@@ -891,11 +991,33 @@ def execute_alignment_v2(
         }
         if plan_info is not None:
             report["certified_plan"] = plan_info
+        if linear_dp_binary is not None:
+            report["dp_execution_backend"] = EXECUTION_BACKEND
+            report["dp_execution"] = execution_info or {
+                "chunks": 0,
+                "invocations": 0,
+                "completed_pairs": 0,
+            }
         (product / SUMMARY).write_text(
             json.dumps(report, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
         )
         if destination.exists() or destination.is_symlink():
             raise FileExistsError("Concurrent DP output publication")
+        if linear_dp_binary is not None:
+            for path in product.iterdir():
+                with path.open("rb") as stream:
+                    os.fsync(stream.fileno())
+            descriptor = os.open(product, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
         os.rename(product, destination)
+        if linear_dp_binary is not None:
+            descriptor = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
     return report

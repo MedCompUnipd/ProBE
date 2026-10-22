@@ -15,6 +15,7 @@ from probe.canonical_v2.candidate_assembly import assemble_candidate_provenance
 from probe.canonical_v2.dag_contract import (
     ROLES,
     destination,
+    large_dp_arguments,
     validate_scientific_contracts,
 )
 from probe.canonical_v2.documentary_handoff import prepare_documentary_handoff
@@ -160,6 +161,7 @@ def dispatch(
             max_total_cells=limits["max_total_cells"],
             max_chunk_cells=limits["max_chunk_cells"],
             dp_backend=BACKEND,
+            **large_dp_arguments(spec),
         )
     elif stage == "stage07":
         publish_canonical_stage07(
